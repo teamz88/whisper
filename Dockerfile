@@ -1,10 +1,11 @@
 # Whisper API — multi-stage build for Coolify (or any Docker host).
 #
-# Build context must be the REPO ROOT (the compose file and Coolify's
-# "Dockerfile location" setting both handle this), because the server depends
-# on the workspace-local @whisper/shared package:
+# Lives at the REPO ROOT on purpose: the server depends on the workspace-local
+# @whisper/shared package, so the build context must be the whole repo — and a
+# root-level Dockerfile means Coolify's defaults (Base Directory "/",
+# Dockerfile Location "/Dockerfile") are already correct.
 #
-#   docker build -f server/Dockerfile .
+#   docker build .
 #
 # bookworm-slim rather than alpine: argon2 ships musl prebuilds today, but the
 # glibc image keeps the door open for any future native dependency without
