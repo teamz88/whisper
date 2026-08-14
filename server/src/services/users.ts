@@ -1,0 +1,184 @@
+import {
+  DEFAULT_SETTINGS,
+  MIN_PASSWORD_LENGTH,
+  type Profile,
+  type Role,
+  type UpdateProfileRequest,
+} from '@whisper/shared';
+
+import {
+  isUniqueViolation,
+  query,
+  queryOne,
+  toIso,
+  withTransaction,
+  type Pool,
+  type PoolClient,
+} from '../db.js';
+import { badRequest, conflict, notFound } from '../errors.js';
+import { hashPassword } from '../auth/password.js';
+
+export interface UserRow {
+  id: string;
+  email: string;
+  password_hash: string;
+  full_name: string | null;
+  role: Role;
+  is_active: boolean;
+  onboarded: boolean;
+  created_at: Date;
+}
+
+const PROFILE_COLUMNS = 'id, email, password_hash, full_name, role, is_active, onboarded, created_at';
+
+export function toProfile(row: UserRow): Profile {
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    role: row.role,
+    isActive: row.is_active,
+    onboarded: row.onboarded,
+    createdAt: toIso(row.created_at),
+  };
+}
+
+export function normaliseEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export async function findByEmail(db: Pool, email: string): Promise<UserRow | null> {
+  return queryOne<UserRow>(
+    db,
+    `SELECT ${PROFILE_COLUMNS} FROM users WHERE lower(email) = lower($1)`,
+    [normaliseEmail(email)],
+  );
+}
+
+export async function findById(db: Pool | PoolClient, id: string): Promise<UserRow | null> {
+  return queryOne<UserRow>(db, `SELECT ${PROFILE_COLUMNS} FROM users WHERE id = $1`, [id]);
+}
+
+export async function getProfile(db: Pool, id: string): Promise<Profile> {
+  const row = await findById(db, id);
+  if (row === null) throw notFound('User not found.');
+  return toProfile(row);
+}
+
+export async function listUsers(db: Pool): Promise<Profile[]> {
+  const result = await query<UserRow>(
+    db,
+    `SELECT ${PROFILE_COLUMNS} FROM users ORDER BY created_at ASC`,
+  );
+  return result.rows.map(toProfile);
+}
+
+export interface CreateUserInput {
+  email: string;
+  password: string;
+  fullName?: string | null;
+  role?: Role;
+}
+
+/**
+ * Creates the user and its settings row in one transaction. Doing this in the
+ * application rather than a database trigger keeps the defaults in
+ * DEFAULT_SETTINGS, where the client reads them from too.
+ */
+export async function createUser(pool: Pool, input: CreateUserInput): Promise<Profile> {
+  const email = normaliseEmail(input.email);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw badRequest('That does not look like an email address.');
+  }
+  if (input.password.length < MIN_PASSWORD_LENGTH) {
+    throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+
+  const passwordHash = await hashPassword(input.password);
+  const role: Role = input.role ?? 'member';
+  const fullName = input.fullName?.trim() ?? null;
+
+  try {
+    return await withTransaction(pool, async (client) => {
+      const user = await queryOne<UserRow>(
+        client,
+        `INSERT INTO users (email, password_hash, full_name, role)
+         VALUES ($1, $2, $3, $4)
+         RETURNING ${PROFILE_COLUMNS}`,
+        [email, passwordHash, fullName === '' ? null : fullName, role],
+      );
+
+      if (user === null) throw new Error('insert returned no row');
+
+      await query(
+        client,
+        `INSERT INTO user_settings
+           (user_id, hotkey, default_style, language, ai_cleanup, history_storage,
+            overlay_position, custom_vocabulary, high_accuracy)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          user.id,
+          DEFAULT_SETTINGS.hotkey,
+          DEFAULT_SETTINGS.defaultStyle,
+          DEFAULT_SETTINGS.language,
+          DEFAULT_SETTINGS.aiCleanup,
+          DEFAULT_SETTINGS.historyStorage,
+          DEFAULT_SETTINGS.overlayPosition,
+          DEFAULT_SETTINGS.customVocabulary,
+          DEFAULT_SETTINGS.highAccuracy,
+        ],
+      );
+
+      return toProfile(user);
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw conflict('An account with that email already exists.');
+    }
+    throw error;
+  }
+}
+
+export async function updateProfile(
+  db: Pool,
+  id: string,
+  patch: UpdateProfileRequest,
+): Promise<Profile> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (patch.fullName !== undefined) {
+    const trimmed = patch.fullName.trim();
+    if (trimmed.length > 120) throw badRequest('Display name is too long.');
+    values.push(trimmed === '' ? null : trimmed);
+    sets.push(`full_name = $${values.length}`);
+  }
+
+  if (patch.onboarded !== undefined) {
+    values.push(patch.onboarded);
+    sets.push(`onboarded = $${values.length}`);
+  }
+
+  if (sets.length === 0) throw badRequest('Nothing to update.');
+
+  values.push(id);
+  const row = await queryOne<UserRow>(
+    db,
+    `UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING ${PROFILE_COLUMNS}`,
+    values,
+  );
+
+  if (row === null) throw notFound('User not found.');
+  return toProfile(row);
+}
+
+export async function setActive(db: Pool, id: string, isActive: boolean): Promise<Profile> {
+  const row = await queryOne<UserRow>(
+    db,
+    `UPDATE users SET is_active = $1 WHERE id = $2 RETURNING ${PROFILE_COLUMNS}`,
+    [isActive, id],
+  );
+  if (row === null) throw notFound('User not found.');
+  return toProfile(row);
+}

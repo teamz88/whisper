@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm -v)",
+      "Bash(git -C \"D:/projects/Whisper-AI\" status)",
+      "Bash(docker --version)",
+      "Bash(psql --version)",
+      "WebFetch(domain:www.electron.build)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "PowerShell(Get-Content *)"
+    ]
+  }
+}

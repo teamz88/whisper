@@ -1,0 +1,51 @@
+{
+  "name": "@whisper/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Whisper desktop client. Talks only to the Whisper API over HTTPS; contains no keys.",
+  "main": "./out/main/index.js",
+  "author": "Omadli Group",
+  "homepage": "https://whisper.omadli.com",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "build:icons": "node scripts/build-icons.mjs",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "release": "npm run build && dotenv -e .env -- electron-builder --win --publish always",
+    "postinstall": "electron-builder install-app-deps || echo Skipped native rebuild - uiohook-napi and nut-js ship prebuilt N-API binaries"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "4.2.6",
+    "@whisper/shared": "*",
+    "electron-store": "11.0.2",
+    "electron-updater": "6.8.9",
+    "uiohook-napi": "1.5.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "dotenv-cli": "^8.0.0",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.7",
+    "electron-vite": "5.0.0",
+    "png-to-ico": "^2.1.8",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sharp": "^0.34.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  }
+}

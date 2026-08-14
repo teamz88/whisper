@@ -1,0 +1,86 @@
+appId: com.whisper.app
+productName: Whisper
+copyright: Copyright © 2026 Omadli Group
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  # The nut-js meta-package depends on all three platform binaries as regular
+  # (not optional) dependencies, so darwin and linux builds install on Windows
+  # too. Shipping them would be dead weight in the installer.
+  - '!**/node_modules/@nut-tree-fork/libnut-darwin/**'
+  - '!**/node_modules/@nut-tree-fork/libnut-linux/**'
+  - '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}'
+  - '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}'
+
+# .node binaries cannot be dlopen'd from inside an asar archive, and nut-js
+# additionally resolves its binary through the `bindings` package, which walks
+# the filesystem at runtime.
+asarUnpack:
+  - '**/*.node'
+  - node_modules/uiohook-napi/**
+  - node_modules/@nut-tree-fork/**
+
+# Tray and window icons, read at runtime from process.resourcesPath.
+extraResources:
+  - from: build/tray.png
+    to: tray.png
+  - from: build/tray@2x.png
+    to: tray@2x.png
+  - from: build/icon.ico
+    to: icon.ico
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  # Internal distribution only — no code signing certificate.
+  signAndEditExecutable: true
+
+nsis:
+  # oneClick must be false for allowToChangeInstallationDirectory to have any
+  # effect; under a one-click installer the option is silently ignored.
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Whisper
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    # electron-updater installs macOS updates from the zip, not the dmg.
+    - target: zip
+      arch: [x64, arm64]
+  notarize: false
+  extendInfo:
+    # Menu-bar app: no Dock icon, no app switcher entry.
+    LSUIElement: true
+    NSMicrophoneUsageDescription: Whisper needs your microphone to turn what you say into text.
+
+dmg:
+  title: ${productName} ${version}
+
+publish:
+  - provider: github
+    owner: omadligroup
+    repo: Whisper-AI
+    private: true
+    releaseType: release
+
+# Neither native dependency needs rebuilding: uiohook-napi and nut-js are both
+# pure N-API with prebuilt binaries for win32-x64, so they are ABI-stable across
+# Electron versions.
+npmRebuild: false

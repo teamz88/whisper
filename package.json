@@ -1,0 +1,29 @@
+{
+  "name": "whisper-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Whisper — push-to-talk voice dictation. Self-hosted API + Electron desktop client.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "shared",
+    "server",
+    "app"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @whisper/shared",
+    "typecheck": "npm run build:shared && npm run typecheck --workspace @whisper/shared && npm run typecheck --workspace @whisper/server && npm run typecheck --workspace @whisper/app",
+    "build": "npm run build:shared && npm run build --workspace @whisper/server && npm run build --workspace @whisper/app",
+    "dev:server": "npm run dev --workspace @whisper/server",
+    "dev:app": "npm run dev --workspace @whisper/app",
+    "migrate": "npm run migrate --workspace @whisper/server",
+    "create-user": "npm run create-user --workspace @whisper/server --",
+    "smoke": "npm run smoke --workspace @whisper/server --",
+    "clean": "node -e \"for (const d of ['shared/dist','server/dist','app/out','app/release']) require('node:fs').rmSync(d,{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

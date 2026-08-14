@@ -1,0 +1,21 @@
+node_modules/
+dist/
+out/
+build/tray.png
+build/tray@2x.png
+build/icon.ico
+app/release/
+*.log
+npm-debug.log*
+
+# Secrets — never commit these. Only the .example files belong in git.
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.tsbuildinfo

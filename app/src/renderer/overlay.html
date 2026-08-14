@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; connect-src 'self' ws://localhost:* http://localhost:*"
+    />
+    <title>Whisper Overlay</title>
+  </head>
+  <body class="overlay-body">
+    <div id="root"></div>
+    <script type="module" src="/src/overlay-main.tsx"></script>
+  </body>
+</html>

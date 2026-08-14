@@ -1,0 +1,50 @@
+# Local development stack: the Whisper API + Postgres.
+#
+#   docker compose up --build
+#
+# First run, in another terminal:
+#   docker compose exec api node server/dist/cli/migrate.js
+#   docker compose exec api node server/dist/cli/create-user.js \
+#     --email you@omadligroup.com --password temp1234 --name "You" --admin
+#
+# The API reads its config from server/.env (copy server/.env.example first and
+# put a real GROQ_API_KEY in it). DATABASE_URL is overridden below to point at
+# the compose network's postgres host.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whisper
+      POSTGRES_PASSWORD: whisper
+      POSTGRES_DB: whisper
+    ports:
+      - '5432:5432'
+    volumes:
+      - whisper-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U whisper -d whisper']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - server/.env
+    environment:
+      DATABASE_URL: postgres://whisper:whisper@db:5432/whisper
+      DATABASE_SSL: 'false'
+      PORT: '8080'
+    ports:
+      - '8080:8080'
+
+volumes:
+  whisper-pgdata:
