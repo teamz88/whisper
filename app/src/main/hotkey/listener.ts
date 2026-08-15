@@ -10,6 +10,7 @@ import {
   modifiersSatisfied,
   readModifierState,
 } from './keymap.js';
+import { fireMenuGuard, needsMenuGuard } from './menu-guard.js';
 import { isHotkeySuppressed } from './suppress.js';
 
 /**
@@ -166,6 +167,12 @@ export class HotkeyListener {
         this.holdActive = true;
         this.holdTriggeredAt = now;
         this.callbacks.onStart('hold');
+
+        // Bare Alt / bare Win holds: a clean tap of these is an OS command on
+        // RELEASE (menu bar / Start menu), which steals focus from the app the
+        // user is dictating into. One synthetic no-op key while they hold makes
+        // the tap "unclean" and Windows leaves the focus alone.
+        if (needsMenuGuard(this.parsed)) fireMenuGuard();
       }
       return;
     }
