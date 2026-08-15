@@ -22,8 +22,20 @@ import { getFocusedAppName } from './focused-app.js';
  * clipboard paste is one keystroke and is layout-independent.
  */
 
-/** How long to let the clipboard settle before the paste keystroke. */
-const CLIPBOARD_SETTLE_MS = 20;
+/**
+ * How long to let the clipboard settle before the paste keystroke. WebView2
+ * apps (new Teams, new Outlook) sync the clipboard lazily; pasting too soon
+ * after writeText occasionally delivers the PREVIOUS clipboard content.
+ */
+const CLIPBOARD_SETTLE_MS = 50;
+
+/**
+ * Held time between key-down and key-up of the synthetic Ctrl+V. Zero-delay
+ * bursts are real keystrokes microseconds apart, and heavyweight web apps
+ * (Teams especially) sometimes drop them; ~30 ms mimics a human press and
+ * makes delivery reliable at no perceptible cost.
+ */
+const PASTE_HOLD_MS = 30;
 
 /** How long our text stays on the clipboard before the original is put back. */
 const RESTORE_DELAY_MS = 8_000;
@@ -66,8 +78,10 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 async function pressPasteViaNutJs(): Promise<void> {
   // Modifiers come first: only the LAST argument is treated as the real key,
-  // everything before it becomes a native modifier flag.
+  // everything before it becomes a native modifier flag. The hold between
+  // press and release is deliberate — see PASTE_HOLD_MS.
   await keyboard.pressKey(PASTE_MODIFIER, Key.V);
+  await delay(PASTE_HOLD_MS);
   await keyboard.releaseKey(PASTE_MODIFIER, Key.V);
 }
 

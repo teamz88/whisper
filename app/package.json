@@ -1,6 +1,6 @@
 {
   "name": "@whisper/app",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Whisper desktop client. Talks only to the Whisper API over HTTPS; contains no keys.",
