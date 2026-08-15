@@ -326,17 +326,28 @@ export function Modal({
 }: ModalProps): ReactNode {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Callers pass inline arrows for onClose, whose identity changes on every
+  // parent render. If this effect depended on it, EVERY keystroke inside the
+  // modal (parent state update → new onClose → effect re-run) would call
+  // focus() again and yank the caret out of the input — the "type one letter,
+  // click the box again" bug. The ref keeps the effect keyed on `open` alone.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return undefined;
 
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
 
     window.addEventListener('keydown', onKeyDown);
-    panelRef.current?.focus();
+    // Land focus where the user will type: the first field if there is one,
+    // the panel (for Escape handling) otherwise. Runs once per open.
+    const firstField = panelRef.current?.querySelector<HTMLElement>('input, textarea, select');
+    (firstField ?? panelRef.current)?.focus();
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

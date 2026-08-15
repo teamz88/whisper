@@ -5,9 +5,12 @@ import { useAppState } from '../state/AppState.js';
 import { Button } from './ui.js';
 
 /**
- * Bottom-right auto-update toast. Only download progress, a ready-to-install
- * build, and errors are worth interrupting for — every other update state
- * stays silent.
+ * Bottom-right auto-update toast. Only download progress and a
+ * ready-to-install build are worth interrupting for. Check FAILURES are
+ * deliberately not toasted: the app auto-checks hourly, and until a first
+ * release is published (or when someone is simply offline) every check fails —
+ * a recurring error popup for that is noise. Failures still show, quietly, in
+ * Settings → Updates, which also has the retry button.
  */
 export function UpdateToast(): ReactNode {
   const { updateStatus } = useAppState();
@@ -20,11 +23,7 @@ export function UpdateToast(): ReactNode {
 
   if (dismissed) return null;
 
-  if (
-    updateStatus.kind !== 'progress' &&
-    updateStatus.kind !== 'downloaded' &&
-    updateStatus.kind !== 'error'
-  ) {
+  if (updateStatus.kind !== 'progress' && updateStatus.kind !== 'downloaded') {
     return null;
   }
 
@@ -66,20 +65,6 @@ export function UpdateToast(): ReactNode {
         </div>
       ) : null}
 
-      {updateStatus.kind === 'error' ? (
-        <div>
-          <p className="text-[13px] leading-snug text-danger">{updateStatus.message}</p>
-          <div className="mt-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void bridge.invoke('updates:check')}
-            >
-              Try again
-            </Button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -44,9 +44,14 @@ export class Updates {
       this.setStatus({ kind: 'downloaded', version: info.version }),
     );
     autoUpdater.on('error', (error) => {
-      // Offline is the common case, not an incident.
+      // The two everyday causes are "no release published yet" and "offline" —
+      // neither is an incident, so the message says so and no toast fires (the
+      // status shows only in Settings → Updates).
       log.warn(`[updates] ${error.message}`);
-      this.setStatus({ kind: 'error', message: 'Could not check for updates.' });
+      this.setStatus({
+        kind: 'error',
+        message: "Couldn't check for updates — none published yet, or you're offline.",
+      });
     });
   }
 
