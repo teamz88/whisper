@@ -182,3 +182,82 @@ export async function setActive(db: Pool, id: string, isActive: boolean): Promis
   if (row === null) throw notFound('User not found.');
   return toProfile(row);
 }
+
+export interface AdminUpdateUserInput {
+  email?: string;
+  password?: string;
+  fullName?: string;
+  role?: Role;
+  isActive?: boolean;
+}
+
+/**
+ * The admin edit: any subset of email / password / name / role / active.
+ * Returns the updated profile plus whether credentials changed, so the route
+ * can decide to revoke the user's sessions.
+ */
+export async function adminUpdateUser(
+  db: Pool,
+  id: string,
+  patch: AdminUpdateUserInput,
+): Promise<{ profile: Profile; passwordChanged: boolean }> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  const set = (column: string, value: unknown): void => {
+    values.push(value);
+    sets.push(`${column} = $${values.length}`);
+  };
+
+  if (patch.email !== undefined) {
+    const email = normaliseEmail(patch.email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw badRequest('That does not look like an email address.');
+    }
+    set('email', email);
+  }
+
+  const passwordChanged = patch.password !== undefined;
+  if (patch.password !== undefined) {
+    if (patch.password.length < MIN_PASSWORD_LENGTH) {
+      throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+    }
+    set('password_hash', await hashPassword(patch.password));
+  }
+
+  if (patch.fullName !== undefined) {
+    const trimmed = patch.fullName.trim();
+    if (trimmed.length > 120) throw badRequest('Display name is too long.');
+    set('full_name', trimmed === '' ? null : trimmed);
+  }
+
+  if (patch.role !== undefined) set('role', patch.role);
+  if (patch.isActive !== undefined) set('is_active', patch.isActive);
+
+  if (sets.length === 0) throw badRequest('Nothing to update.');
+
+  values.push(id);
+
+  try {
+    const row = await queryOne<UserRow>(
+      db,
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING ${PROFILE_COLUMNS}`,
+      values,
+    );
+    if (row === null) throw notFound('User not found.');
+    return { profile: toProfile(row), passwordChanged };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw conflict('An account with that email already exists.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * Permanent removal. The schema cascades: user_settings, sessions and
+ * refresh_tokens rows all go with the user.
+ */
+export async function deleteUser(db: Pool, id: string): Promise<void> {
+  const result = await query(db, 'DELETE FROM users WHERE id = $1', [id]);
+  if ((result.rowCount ?? 0) === 0) throw notFound('User not found.');
+}

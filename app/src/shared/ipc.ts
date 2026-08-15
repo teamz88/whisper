@@ -18,6 +18,7 @@ import type {
   Settings,
   UpdateProfileRequest,
   UpdateSettingsRequest,
+  UpdateUserRequest,
   UserStats,
   WritingStyle,
 } from '@whisper/shared';
@@ -128,7 +129,10 @@ export interface IpcInvokeMap {
 
   'admin:users': { req: void; res: AdminUser[] };
   'admin:create-user': { req: CreateUserRequest; res: AdminUser };
-  'admin:update-user': { req: { id: string; isActive: boolean }; res: AdminUser };
+  /** Any subset of UpdateUserRequest: email, password, fullName, role, isActive. */
+  'admin:update-user': { req: { id: string; patch: UpdateUserRequest }; res: AdminUser };
+  /** Permanent — the account and all its history cascade away. */
+  'admin:delete-user': { req: { id: string }; res: void };
   'admin:stats': { req: void; res: AdminStats };
 
   /** Dashboard Dictation Bar. Also the universal stop for hotkey recordings. */
@@ -240,6 +244,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'admin:users',
   'admin:create-user',
   'admin:update-user',
+  'admin:delete-user',
   'admin:stats',
   'recording:toggle',
   'recording:state',

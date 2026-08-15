@@ -86,9 +86,17 @@ also turn AI cleanup off entirely and get the raw transcription.
 
 ## For admins
 
-- **Add a teammate:** Settings → Team → Add user (email + temp password + role),
-  then send them the installer and their credentials.
-- **Deactivate someone:** Settings → Team → Deactivate. Their session is
-  revoked immediately.
+Everything lives in Settings → Team:
+
+- **Add a teammate:** Add user (email + temp password + role), then send them
+  the installer and their credentials.
+- **Edit anyone:** change their email, name or role, or set a **new temporary
+  password** — that's also the "forgot my password" fix. A password change
+  signs them out everywhere.
+- **Deactivate:** blocks access immediately (sessions revoked) but keeps their
+  account and history — reversible.
+- **Delete:** permanently removes the account **and their entire dictation
+  history**. Not reversible; prefer Deactivate unless you mean it.
+- You can't deactivate, demote or delete your own account — ask another admin.
 - Team stats (total words, most active, sessions this week) live in the same
   panel.

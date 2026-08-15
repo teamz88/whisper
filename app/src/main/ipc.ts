@@ -216,10 +216,16 @@ export function registerIpc(context: AppContext): void {
     return context.api.request<AdminUser>('/admin/users', { method: 'POST', body: payload });
   });
 
-  handle('admin:update-user', async ({ id, isActive }) => {
+  handle('admin:update-user', async ({ id, patch }) => {
     return context.api.request<AdminUser>(`/admin/users/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: { isActive },
+      body: patch,
+    });
+  });
+
+  handle('admin:delete-user', async ({ id }) => {
+    await context.api.request<{ deleted: true }>(`/admin/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   });
 
