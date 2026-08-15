@@ -223,7 +223,13 @@ export function Settings(): ReactNode {
             label="Spoken language"
             control={
               <Select
-                options={LANGUAGES.map((l) => ({ value: l.code, label: l.label, hint: l.native }))}
+                options={LANGUAGES.map((l) => ({
+                  value: l.code,
+                  label: l.label,
+                  // "English — English" reads silly; only show the endonym
+                  // when it differs.
+                  ...(l.native === l.label ? {} : { hint: l.native }),
+                }))}
                 value={settings.language}
                 onChange={(language) => {
                   void saveSettings({ language: coerceLanguageCode(language) });
@@ -313,6 +319,10 @@ export function Settings(): ReactNode {
             hint="Which input Whisper listens to on this computer."
             control={
               <Select
+                // Capped width: device names can be paragraph-length
+                // ("Набор микрофонов (Технология Intel® Smart Sound…)") and an
+                // unconstrained select crushes the row's label column.
+                className="w-64 max-w-full"
                 options={
                   deviceOptions.length > 0
                     ? deviceOptions
