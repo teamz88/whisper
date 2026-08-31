@@ -10,9 +10,9 @@ files:
   - out/**/*
   - package.json
   # The nut-js meta-package depends on all three platform binaries as regular
-  # (not optional) dependencies, so darwin and linux builds install on Windows
-  # too. Shipping them would be dead weight in the installer.
-  - '!**/node_modules/@nut-tree-fork/libnut-darwin/**'
+  # (not optional) dependencies, so every platform's binary installs everywhere.
+  # Each platform target excludes the OTHER platforms' binaries below — a global
+  # exclusion here broke the mac build (libnut-darwin missing at runtime).
   - '!**/node_modules/@nut-tree-fork/libnut-linux/**'
   - '!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}'
   - '!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}'
@@ -35,6 +35,8 @@ extraResources:
     to: icon.ico
 
 win:
+  files:
+    - "!**/node_modules/@nut-tree-fork/libnut-darwin/**"
   target:
     - target: nsis
       arch: [x64]
@@ -56,6 +58,8 @@ nsis:
   artifactName: ${productName}-Setup-${version}.${ext}
 
 mac:
+  files:
+    - '!**/node_modules/@nut-tree-fork/libnut-win32/**'
   category: public.app-category.productivity
   icon: build/icon.icns
   target:
