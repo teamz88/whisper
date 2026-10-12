@@ -8,6 +8,9 @@ Slack, Notion, Telegram, your IDE, anywhere you can type.
 
 ## 1. Install (Windows)
 
+> On a Mac? See the [macOS Guide](MACOS-GUIDE.md) — install steps, the
+> one-time "Open Anyway" approval, and the permissions Whisper needs.
+
 1. Get **`Whisper-Setup-<version>.exe`** from your admin.
 2. Run it. Windows SmartScreen will warn because the app is unsigned — click
    **More info → Run anyway**. (Internal tool; this is expected.)

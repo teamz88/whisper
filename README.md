@@ -79,7 +79,7 @@ app's **Settings → Team** panel once you're signed in as an admin.
    `DATABASE_URL`, `GROQ_API_KEY`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`,
    `TRANSCRIPTION_PROVIDER=groq`, `PORT=8080`, `CORS_ORIGIN=*`. Set
    `DATABASE_SSL=true` only if your Postgres requires TLS.
-4. **Expose it** at your domain (e.g. `https://whisper.omadli.com`) — Coolify
+4. **Expose it** at your domain (e.g. `https://whisper.agent.omadligrouphq.com`) — Coolify
    terminates TLS. Health check path: `/health`.
 5. **Run the migration once** (container terminal):
    `node server/dist/cli/migrate.js`
@@ -110,6 +110,10 @@ hotkey recording too.
 npm run build:icons --workspace @whisper/app   # regenerate icons from build/icon-source.svg
 cd app && npm run build:win                    # unsigned NSIS installer → app/release/
 ```
+
+macOS builds must be made on a Mac (`npm run build:mac` → .dmg for arm64 and
+x64). Step-by-step build, share and install instructions, including the
+Gatekeeper approval and permission prompts, are in [docs/MACOS-GUIDE.md](docs/MACOS-GUIDE.md).
 
 Releases (auto-update feed):
 
