@@ -69,6 +69,9 @@ mac:
     # electron-updater installs macOS updates from the zip, not the dmg.
     - target: zip
       arch: [arm64]
+  # Unsigned on purpose: never pick up a developer certificate from the
+  # builder's Keychain.
+  identity: null
   notarize: false
   extendInfo:
     # Menu-bar app: no Dock icon, no app switcher entry.

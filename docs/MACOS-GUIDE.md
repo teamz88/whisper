@@ -57,11 +57,16 @@ able to sign in.
 ### A4. Build
 
 ```bash
+npm run build:shared
 cd app
 npm run build:mac
 ```
 
-This compiles the app and packages it. Expect 2–5 minutes. When it finishes,
+Run `build:shared` from the repository root first. It compiles the `shared`
+package the app imports. `npm install` does not build it, and without it the
+build fails with `Failed to resolve entry for package "@whisper/shared"`.
+
+`build:mac` compiles the app and packages it. Expect 2–5 minutes. When it finishes,
 look in `app/release/`:
 
 | File | Who it is for |
@@ -107,7 +112,9 @@ Two things to know when sharing:
 - **The app is not code-signed or notarized.** We have no Apple Developer
   certificate, exactly like the Windows build has no signing certificate.
   macOS will warn on first launch and the user has to approve it once (Part B
-  explains how). This is expected for an internal tool.
+  explains how). This is expected for an internal tool. The build stays
+  unsigned even if your Keychain has an Apple developer certificate:
+  `app/electron-builder.yml` sets `identity: null`.
 - **Updates are manual on macOS.** The Windows app updates itself from GitHub
   Releases. The macOS updater needs a signed app, so it cannot. When you build
   a new version, share the new `.dmg` and ask people to reinstall. It takes
@@ -119,6 +126,7 @@ Two things to know when sharing:
 cd whisper
 git pull
 npm install
+npm run build:shared
 cd app
 npm run build:mac
 ```
