@@ -6,6 +6,7 @@ import { log } from '../log.js';
 import {
   ESCAPE_KEYCODE,
   MODIFIER_KEYCODES,
+  isModifierKeycode,
   keycodeForKey,
   modifiersSatisfied,
   readModifierState,
@@ -85,6 +86,16 @@ export class HotkeyListener {
   /** Last keydown per keycode, for the auto-repeat vs re-press distinction. */
   private lastKeydownAt = new Map<number, number>();
 
+  /**
+   * Modifier keys physically down, for the paste: a synthetic Ctrl+V sent
+   * while the user still holds Win arrives as Win+Ctrl+V and opens a system
+   * panel instead of pasting. Tracked from keydown/keyup pairs and pruned by
+   * every event's modifier flags — but Windows can drop a Win keyup entirely,
+   * so callers only ever wait on this briefly.
+   */
+  private heldModifiers = new Set<number>();
+  private releaseWaiters: Array<() => void> = [];
+
   /** Toggle-mode edge detection: only fire on a fresh press, not on repeat. */
   private toggleKeyDown = false;
   private lastToggleAt = 0;
@@ -108,6 +119,24 @@ export class HotkeyListener {
   /** While Settings is capturing a new combo, the global listener goes quiet. */
   setCapturing(capturing: boolean): void {
     this.capturing = capturing;
+  }
+
+  /** Resolves true once no modifier is held, or false if one still looks held after `timeoutMs`. */
+  waitForModifiersReleased(timeoutMs: number): Promise<boolean> {
+    if (this.heldModifiers.size === 0) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      const waiter = (): void => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        this.releaseWaiters = this.releaseWaiters.filter((w) => w !== waiter);
+        log.warn(`[hotkey] modifiers still held after ${timeoutMs}ms: keycodes ${[...this.heldModifiers].join(', ')}`);
+        resolve(false);
+      }, timeoutMs);
+      this.releaseWaiters.push(waiter);
+    });
   }
 
   start(): void {
@@ -151,7 +180,34 @@ export class HotkeyListener {
   // Event handling
   // ---------------------------------------------------------------------------
 
+  /**
+   * Runs for every event, before the capture and suppression early-returns:
+   * a real keyup missed while suppressed would leave the key held forever.
+   */
+  private trackModifiers(event: UiohookKeyboardEvent, down: boolean): void {
+    if (isModifierKeycode(event.keycode)) {
+      if (down) this.heldModifiers.add(event.keycode);
+      else this.heldModifiers.delete(event.keycode);
+    }
+
+    // The flags can only release keys here, never press them.
+    const state = readModifierState(event);
+    for (const modifier of ['Ctrl', 'Shift', 'Alt', 'Meta'] as const) {
+      if (state[modifier]) continue;
+      for (const keycode of MODIFIER_KEYCODES[modifier]) {
+        if (!(down && keycode === event.keycode)) this.heldModifiers.delete(keycode);
+      }
+    }
+
+    if (this.heldModifiers.size === 0 && this.releaseWaiters.length > 0) {
+      const waiters = this.releaseWaiters;
+      this.releaseWaiters = [];
+      for (const waiter of waiters) waiter();
+    }
+  }
+
   private handleKeydown(event: UiohookKeyboardEvent): void {
+    this.trackModifiers(event, true);
     if (this.capturing || isHotkeySuppressed()) return;
 
     const now = Date.now();
@@ -265,6 +321,7 @@ export class HotkeyListener {
   }
 
   private handleKeyup(event: UiohookKeyboardEvent): void {
+    this.trackModifiers(event, false);
     if (this.capturing || isHotkeySuppressed()) return;
 
     if (this.parsed.mode === 'toggle') {

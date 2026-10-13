@@ -28,44 +28,84 @@ import type { OverlayWindow } from '../windows/overlay.js';
 /** How long the clipboard-fallback message stays up — longer, it must be read. */
 const OVERLAY_FALLBACK_FADE_MS = 5_000;
 
+/**
+ * After a recording stops, a paste waits up to this long for the modifiers to
+ * come up — the other key of a hold combo is often still down for a moment.
+ * Then it pastes regardless: Windows sometimes never reports a Win keyup, and
+ * trusting a key tracker that missed one meant no dictation got pasted at all.
+ * A result arriving later than this after the stop is pasted straight away.
+ */
+const KEY_RELEASE_GRACE_MS = 600;
+
+/**
+ * Pastes wait for every earlier dictation, so one hung upload would hold back
+ * all the ones after it. A 10-minute recording transcribes well within this.
+ */
+const DICTATE_TIMEOUT_MS = 90_000;
+
 export interface ControllerDeps {
   overlay: OverlayWindow;
   api: ApiClient;
   getSettings: () => Settings;
   /** Send to every renderer (dashboard + overlay). */
   broadcast: <T>(channel: string, payload: T) => void;
+  /** Resolves true once no modifier key is held, false on timeout. */
+  waitForModifiersReleased: (timeoutMs: number) => Promise<boolean>;
 }
 
-type Phase = 'idle' | 'listening' | 'processing';
+/** What a finished dictation has to show on the overlay. */
+type Delivery =
+  | { kind: 'quiet' }
+  | { kind: 'done'; text: string; wordCount: number; pasted: boolean }
+  | { kind: 'error'; message: string };
 
 /**
  * Owns the recording lifecycle. The overlay renderer owns the microphone; this
  * class owns everything else: state, upload, paste, and what the overlay shows.
+ *
+ * Recording and processing overlap: a new dictation can start while earlier
+ * ones are still uploading. Uploads run side by side; pastes run one at a time
+ * in recording order, and never while a recording is live or a modifier is
+ * down.
  */
 export class RecordingController {
   private readonly deps: ControllerDeps;
 
-  private phase: Phase = 'idle';
+  private listening = false;
   private source: RecordingSource | null = null;
 
   /**
-   * Bumped on every start. Audio and errors arriving from a previous
-   * generation (a stale overlay flush after the user already started a new
-   * dictation) are dropped instead of pasted into the present.
+   * Bumped on every start; identifies each recording. The overlay echoes it on
+   * every audio event, so audio from a cancelled or unknown recording is
+   * dropped instead of pasted.
    */
   private generation = 0;
+
+  /** Recordings that have stopped and whose audio the overlay still owes. */
+  private readonly awaitingAudio = new Set<number>();
+
+  /** Dictations uploading or waiting for their turn to paste. */
+  private inFlight = 0;
+
+  /** Chains the pastes so they land in recording order. */
+  private pasteQueue: Promise<void> = Promise.resolve();
+
+  private notListeningWaiters: Array<() => void> = [];
+
+  /** When the last recording ended, for the key-release grace before a paste. */
+  private lastStoppedAt = 0;
 
   constructor(deps: ControllerDeps) {
     this.deps = deps;
   }
 
-  /** Only 'listening' counts — the hotkey must not "stop" a processing upload. */
+  /** Only a live recording counts — the hotkey must not "stop" an upload. */
   isListening(): boolean {
-    return this.phase === 'listening';
+    return this.listening;
   }
 
   getState(): RecordingState {
-    return { active: this.phase === 'listening', source: this.source };
+    return { active: this.listening, source: this.source };
   }
 
   /**
@@ -74,10 +114,10 @@ export class RecordingController {
    * user's keypress and the moment audio starts being captured.
    */
   startRecording(source: RecordingSource): void {
-    if (this.phase !== 'idle') return;
+    if (this.listening) return;
 
     this.generation += 1;
-    this.phase = 'listening';
+    this.listening = true;
     this.source = source;
 
     // The device preference rides along because the overlay renderer is the
@@ -91,7 +131,7 @@ export class RecordingController {
     });
     this.broadcastState();
 
-    log.info(`[rec] start (${source})`);
+    log.info(`[rec] #${this.generation} start (${source})`);
   }
 
   /**
@@ -99,33 +139,35 @@ export class RecordingController {
    * closing the mic, resampling to 16 kHz and sending overlay:audio-ready.
    */
   stopRecording(reason: string): void {
-    if (this.phase !== 'listening') return;
+    if (!this.listening) return;
 
-    this.phase = 'processing';
+    this.awaitingAudio.add(this.generation);
+    this.endListening();
     this.setOverlay({ kind: 'processing' });
     this.broadcastState();
 
-    log.info(`[rec] stop (${reason})`);
+    log.info(`[rec] #${this.generation} stop (${reason})`);
   }
 
   /**
-   * Like stop, but nothing is uploaded or pasted. The generation bump makes
-   * any audio the overlay still flushes for this recording stale.
+   * Like stop, but nothing is uploaded or pasted: the generation never enters
+   * awaitingAudio, so whatever the overlay still flushes for it is dropped.
    */
   cancelRecording(reason: string): void {
-    if (this.phase !== 'listening') return;
+    if (!this.listening) return;
 
-    this.generation += 1;
-    this.finishQuietly();
+    this.endListening();
+    this.settleOverlay();
+    this.broadcastState();
 
-    log.info(`[rec] cancelled (${reason})`);
+    log.info(`[rec] #${this.generation} cancelled (${reason})`);
   }
 
   /** The dashboard Dictation Bar — and the universal stop for any recording. */
   toggle(): RecordingState {
-    if (this.phase === 'listening') {
+    if (this.listening) {
       this.stopRecording('dashboard');
-    } else if (this.phase === 'idle') {
+    } else {
       this.startRecording('dashboard');
     }
     return this.getState();
@@ -137,45 +179,50 @@ export class RecordingController {
 
   /** The mic stream closed and the audio is resampled: upload and paste. */
   onAudioReady(payload: AudioReadyPayload): void {
-    if (payload.generation !== this.generation) {
-      log.warn('[rec] stale audio dropped (superseded dictation)');
-      return;
-    }
-    const generation = payload.generation;
+    const { generation } = payload;
 
     // Recording can also end without a stop call (10-minute cap).
-    if (this.phase === 'listening') {
-      this.phase = 'processing';
-      this.setOverlay({ kind: 'processing' });
+    if (this.listening && generation === this.generation) {
+      this.awaitingAudio.add(generation);
+      this.endListening();
       this.broadcastState();
     }
 
-    void this.process(payload, generation).catch((error: unknown) => {
-      log.error('[rec] processing failed', error);
-      this.failIfCurrent(generation, error instanceof Error ? error.message : 'Something went wrong.');
-    });
+    if (!this.awaitingAudio.delete(generation)) {
+      log.warn(`[rec] #${generation} stale audio dropped (cancelled or superseded recording)`);
+      return;
+    }
+
+    this.enqueue(payload, generation);
   }
 
   onAudioEmpty(generation: number): void {
     // UNKNOWN_GENERATION is a fresh overlay renderer answering a replayed
-    // 'processing' it never recorded for — honoured only while actually wedged
-    // there. Anything else must match the live generation, or it is the flush
-    // of a superseded dictation and gets dropped.
+    // 'processing' it never recorded for: whatever audio we were still owed
+    // is gone. Anything else must be a recording we are waiting on.
     if (generation === UNKNOWN_GENERATION) {
-      if (this.phase !== 'processing') return;
-    } else if (generation !== this.generation || this.phase === 'idle') {
+      if (this.listening || this.awaitingAudio.size === 0) return;
+      this.awaitingAudio.clear();
+    } else if (!this.awaitingAudio.delete(generation)) {
       return;
     }
-    log.info('[rec] no audio captured');
-    this.finishQuietly();
+    log.info(`[rec] #${generation} no audio captured`);
+    this.settleOverlay();
   }
 
-  /** The overlay renderer died. Whatever was in flight is unrecoverable. */
+  /**
+   * The overlay renderer died. Audio it still held is unrecoverable; dictations
+   * already uploading are not affected.
+   */
   abort(reason: string): void {
-    if (this.phase === 'idle') return;
+    if (!this.listening && this.awaitingAudio.size === 0) return;
     log.warn(`[rec] aborted: ${reason}`);
-    this.generation += 1; // orphan any in-flight process() result
-    this.finishQuietly();
+    this.awaitingAudio.clear();
+    if (this.listening) {
+      this.endListening();
+      this.broadcastState();
+    }
+    this.settleOverlay();
   }
 
   onMicDenied(message: string, generation: number): void {
@@ -184,8 +231,8 @@ export class RecordingController {
       return;
     }
     log.warn(`[rec] microphone denied: ${message}`);
-    this.phase = 'idle';
-    this.source = null;
+    this.awaitingAudio.delete(generation);
+    if (this.listening) this.endListening();
     this.setOverlay({ kind: 'error', message: 'Microphone blocked' });
     this.deps.overlay.hideAfter(OVERLAY_ERROR_FADE_MS);
     this.broadcastState();
@@ -201,20 +248,49 @@ export class RecordingController {
   // The pipeline
   // -------------------------------------------------------------------------
 
-  private async process(payload: AudioReadyPayload, generation: number): Promise<void> {
+  private enqueue(payload: AudioReadyPayload, generation: number): void {
     const settings = this.deps.getSettings();
-    const samples = new Float32Array(payload.samples);
-
-    if (samples.length === 0) {
-      this.finishQuietly();
-      return;
-    }
-
-    const wav = encodeWav(samples, payload.sampleRate);
     const durationMs = Math.max(0, payload.audioStoppedAt - payload.audioStartedAt);
 
+    this.inFlight += 1;
+    this.settleOverlay();
+
+    // The upload starts now, alongside any earlier ones still running; only
+    // the paste waits its turn. The no-op catch keeps a failure from counting
+    // as unhandled before deliver() gets to it.
+    const upload = this.upload(payload, settings, durationMs, generation);
+    upload.catch(() => undefined);
+
+    this.pasteQueue = this.pasteQueue.then(async () => {
+      let result: Delivery;
+      try {
+        result = await this.deliver(upload, settings, durationMs, generation);
+      } catch (error) {
+        log.error(`[rec] #${generation} processing failed`, error);
+        result = {
+          kind: 'error',
+          message: error instanceof Error ? error.message : 'Something went wrong.',
+        };
+      }
+      this.inFlight -= 1;
+      this.showResult(result);
+    });
+  }
+
+  /** Null when there is nothing worth sending. */
+  private async upload(
+    payload: AudioReadyPayload,
+    settings: Settings,
+    durationMs: number,
+    generation: number,
+  ): Promise<DictateResponse | null> {
+    const samples = new Float32Array(payload.samples);
+    if (samples.length === 0) return null;
+
+    const wav = encodeWav(samples, payload.sampleRate);
+
     log.info(
-      `[rec] audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples, ` +
+      `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples, ` +
         `${(wav.byteLength / 1024).toFixed(0)} kB wav, mic open ${durationMs}ms`,
     );
 
@@ -234,47 +310,50 @@ export class RecordingController {
       'dictation.wav',
     );
 
+    const startedAt = Date.now();
     const response = await this.deps.api.request<DictateResponse>('/dictate', {
       method: 'POST',
       formData: form,
+      timeoutMs: DICTATE_TIMEOUT_MS,
     });
+    log.info(`[rec] #${generation} server answered in ${Date.now() - startedAt}ms`);
+    return response;
+  }
 
-    if (generation !== this.generation) {
-      log.warn('[rec] stale dictation result dropped');
-      return;
-    }
+  private async deliver(
+    upload: Promise<DictateResponse | null>,
+    settings: Settings,
+    durationMs: number,
+    generation: number,
+  ): Promise<Delivery> {
+    const response = await upload;
+    if (response === null) return { kind: 'quiet' };
 
     if (isDiscarded(response)) {
-      log.info(`[rec] discarded by server (${response.reason})`);
-      this.finishQuietly();
-      return;
+      log.info(`[rec] #${generation} discarded by server (${response.reason})`);
+      return { kind: 'quiet' };
     }
+
+    // Never paste into a live recording, and not while the hotkey that just
+    // stopped one may still be down: the synthetic Ctrl+V sent while Win is
+    // held arrives as Win+Ctrl+V, a system shortcut. A recording that starts
+    // during the wait means waiting again.
+    const waitStartedAt = Date.now();
+    if (this.listening) log.info(`[rec] #${generation} ready, waiting for the live recording to end`);
+    do {
+      await this.whenNotListening();
+      const sinceStop = Date.now() - this.lastStoppedAt;
+      if (sinceStop < KEY_RELEASE_GRACE_MS) {
+        const released = await this.deps.waitForModifiersReleased(KEY_RELEASE_GRACE_MS - sinceStop);
+        if (!released) log.warn(`[rec] #${generation} modifiers still look held — pasting anyway`);
+      }
+    } while (this.listening);
 
     const outcome = await pasteText(response.cleaned);
-
-    // Re-checked after the paste too: pasteText awaits real time (clipboard
-    // settle, subprocess on the fallback path), and a newer dictation starting
-    // meanwhile owns the overlay and the phase now.
-    if (generation !== this.generation) {
-      log.warn('[rec] dictation superseded during paste');
-      return;
-    }
-
-    const previewText =
-      response.cleaned.length > OVERLAY_DONE_PREVIEW_CHARS
-        ? `${response.cleaned.slice(0, OVERLAY_DONE_PREVIEW_CHARS).trimEnd()}…`
-        : response.cleaned;
-
-    this.phase = 'idle';
-    this.source = null;
-    this.setOverlay({
-      kind: 'done',
-      text: previewText,
-      wordCount: response.wordCount,
-      pasted: outcome.pasted,
-    });
-    this.deps.overlay.hideAfter(outcome.pasted ? OVERLAY_DONE_FADE_MS : OVERLAY_FALLBACK_FADE_MS);
-    this.broadcastState();
+    log.info(
+      `[rec] #${generation} ${outcome.pasted ? `pasted via ${outcome.method}` : `not pasted (${outcome.error ?? 'unknown'})`}` +
+        ` after waiting ${Date.now() - waitStartedAt}ms`,
+    );
 
     // Keep the dashboard's Today list and stats live without a refetch cycle.
     if (response.sessionId !== undefined) {
@@ -295,23 +374,65 @@ export class RecordingController {
         durationMs,
       });
     }
+
+    const previewText =
+      response.cleaned.length > OVERLAY_DONE_PREVIEW_CHARS
+        ? `${response.cleaned.slice(0, OVERLAY_DONE_PREVIEW_CHARS).trimEnd()}…`
+        : response.cleaned;
+
+    return {
+      kind: 'done',
+      text: previewText,
+      wordCount: response.wordCount,
+      pasted: outcome.pasted,
+    };
   }
 
-  /** Silence, hallucination, empty capture: the overlay just goes away. */
-  private finishQuietly(): void {
-    this.phase = 'idle';
-    this.source = null;
-    this.setOverlay({ kind: 'idle' });
-    this.broadcastState();
+  /**
+   * A live recording owns the overlay. Otherwise errors and the "on clipboard"
+   * fallback always show; a pasted result only shows when it is the last
+   * dictation in flight, else the overlay stays on 'processing'.
+   */
+  private showResult(result: Delivery): void {
+    if (this.listening) return;
+
+    if (result.kind === 'error') {
+      this.setOverlay({ kind: 'error', message: shorten(result.message) });
+      this.deps.overlay.hideAfter(OVERLAY_ERROR_FADE_MS);
+      return;
+    }
+
+    if (result.kind === 'quiet' || (result.pasted && this.hasPendingWork())) {
+      this.settleOverlay();
+      return;
+    }
+
+    this.setOverlay(result);
+    this.deps.overlay.hideAfter(result.pasted ? OVERLAY_DONE_FADE_MS : OVERLAY_FALLBACK_FADE_MS);
   }
 
-  private failIfCurrent(generation: number, message: string): void {
-    if (generation !== this.generation) return;
-    this.phase = 'idle';
+  /** Nothing new to report: 'processing' while work remains, else hidden. */
+  private settleOverlay(): void {
+    if (this.listening) return;
+    this.setOverlay(this.hasPendingWork() ? { kind: 'processing' } : { kind: 'idle' });
+  }
+
+  private hasPendingWork(): boolean {
+    return this.awaitingAudio.size > 0 || this.inFlight > 0;
+  }
+
+  private endListening(): void {
+    this.listening = false;
     this.source = null;
-    this.setOverlay({ kind: 'error', message: shorten(message) });
-    this.deps.overlay.hideAfter(OVERLAY_ERROR_FADE_MS);
-    this.broadcastState();
+    this.lastStoppedAt = Date.now();
+    const waiters = this.notListeningWaiters;
+    this.notListeningWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  private whenNotListening(): Promise<void> {
+    if (!this.listening) return Promise.resolve();
+    return new Promise((resolve) => this.notListeningWaiters.push(resolve));
   }
 
   private setOverlay(state: OverlayState): void {

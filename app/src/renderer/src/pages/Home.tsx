@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { firstName, hotkeyLabel } from '@whisper/shared';
+import { firstName, hotkeyLabel, hotkeyVerb } from '@whisper/shared';
 
 import { DictationBar } from '../components/DictationBar.js';
 import { SessionRow } from '../components/SessionRow.js';
@@ -13,6 +13,7 @@ export function Home(): ReactNode {
   const { profile, settings, recent, removeSession, setPage, appInfo } = useAppState();
 
   const mac = appInfo?.platform === 'darwin';
+  const verb = hotkeyVerb(settings.hotkey);
   const today = recent.filter((session) => formatDay(session.createdAt) === 'Today');
   const hasOlder = recent.length > today.length;
 
@@ -24,7 +25,7 @@ export function Home(): ReactNode {
             Welcome back, <span className="font-serif italic">{firstName(profile)}</span>
           </h1>
           <p className="mt-1 text-[13px] text-ink-soft">
-            Hold {hotkeyLabel(settings.hotkey, { mac })} anywhere to dictate.
+            {verb} {hotkeyLabel(settings.hotkey, { mac })} anywhere to dictate.
           </p>
         </header>
 
@@ -38,7 +39,7 @@ export function Home(): ReactNode {
                 {today.length === 0 ? (
                   <EmptyState
                     title="Nothing yet today"
-                    body="Hold your shortcut anywhere and start talking. What you say lands right where your cursor is."
+                    body={`${verb} your shortcut anywhere and start talking. What you say lands right where your cursor is.`}
                   />
                 ) : (
                   <div className="flex flex-col gap-0.5">

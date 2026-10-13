@@ -27,6 +27,8 @@ interface RequestOptions {
   /** Pre-built body (multipart). Wins over `body`. */
   formData?: FormData;
   query?: Record<string, string | number | undefined>;
+  /** Give up after this long. Without it fetch can wait for minutes. */
+  timeoutMs?: number;
 }
 
 export class ApiClient {
@@ -201,10 +203,27 @@ export class ApiClient {
       body = JSON.stringify(options.body);
     }
 
+    const method = options.method ?? 'GET';
+    const startedAt = Date.now();
+
     let response: Response;
     try {
-      response = await fetch(url, { method: options.method ?? 'GET', headers, body });
+      response = await fetch(url, {
+        method,
+        headers,
+        body,
+        ...(options.timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(options.timeoutMs) }),
+      });
     } catch (error) {
+      // fetch reports every network failure as "fetch failed"; the real reason
+      // (reset, DNS, TLS, timeout) is on `cause`, and the user-facing message
+      // below hides it, so it has to be logged here.
+      const cause = error instanceof Error && error.cause !== undefined ? ` (${String(error.cause)})` : '';
+      log.warn(`[api] ${method} ${path} failed after ${Date.now() - startedAt}ms: ${String(error)}${cause}`);
+
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new ApiError(0, 'internal_error', 'The Whisper server took too long to answer.');
+      }
       throw new ApiError(
         0,
         'internal_error',
@@ -213,6 +232,8 @@ export class ApiClient {
     }
 
     if (response.ok) return response;
+
+    log.warn(`[api] ${method} ${path} -> ${response.status} after ${Date.now() - startedAt}ms`);
 
     let parsed: unknown = null;
     try {
