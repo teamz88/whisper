@@ -145,28 +145,24 @@ export async function updateProfile(
   id: string,
   patch: UpdateProfileRequest,
 ): Promise<Profile> {
-  const sets: string[] = [];
-  const values: unknown[] = [];
+  const setName = patch.fullName !== undefined;
+  const setOnboarded = patch.onboarded !== undefined;
+  if (!setName && !setOnboarded) throw badRequest('Nothing to update.');
 
-  if (patch.fullName !== undefined) {
-    const trimmed = patch.fullName.trim();
-    if (trimmed.length > 120) throw badRequest('Display name is too long.');
-    values.push(trimmed === '' ? null : trimmed);
-    sets.push(`full_name = $${values.length}`);
-  }
+  const trimmed = patch.fullName?.trim() ?? '';
+  if (trimmed.length > 120) throw badRequest('Display name is too long.');
 
-  if (patch.onboarded !== undefined) {
-    values.push(patch.onboarded);
-    sets.push(`onboarded = $${values.length}`);
-  }
-
-  if (sets.length === 0) throw badRequest('Nothing to update.');
-
-  values.push(id);
+  // One fixed statement; each column changes only when its flag is set. A SET
+  // list assembled from strings was safe (column names are constants) but read
+  // as SQL injection to static analysis, which blocked every commit.
   const row = await queryOne<UserRow>(
     db,
-    `UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING ${PROFILE_COLUMNS}`,
-    values,
+    `UPDATE users
+        SET full_name = CASE WHEN $1::boolean THEN $2::text ELSE full_name END,
+            onboarded = CASE WHEN $3::boolean THEN $4::boolean ELSE onboarded END
+      WHERE id = $5
+  RETURNING ${PROFILE_COLUMNS}`,
+    [setName, trimmed === '' ? null : trimmed, setOnboarded, patch.onboarded ?? false, id],
   );
 
   if (row === null) throw notFound('User not found.');
