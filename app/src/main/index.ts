@@ -8,6 +8,7 @@ import { recoverHotkey } from './hotkey/permission.js';
 import { flushClipboardRestore, verifyPasteKeys } from './inject/paste.js';
 import { applySettings, registerIpc, type AppContext } from './ipc.js';
 import { log } from './log.js';
+import { enableStartAtLoginOnce } from './login-item.js';
 import { RecordingController } from './recording/controller.js';
 import { getStoredSettings } from './store.js';
 import { Updates } from './updates.js';
@@ -175,6 +176,7 @@ async function main(): Promise<void> {
   }
 
   tray.create();
+  enableStartAtLoginOnce();
   overlay.create();
   verifyPasteKeys();
   if (!listener.start()) recoverHotkey(listener);
