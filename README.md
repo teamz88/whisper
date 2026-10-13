@@ -115,19 +115,23 @@ macOS builds must be made on a Mac (`npm run build:mac` → .dmg for arm64 and
 x64). Step-by-step build, share and install instructions, including the
 Gatekeeper approval and permission prompts, are in [docs/MACOS-GUIDE.md](docs/MACOS-GUIDE.md).
 
-Releases (auto-update feed):
+Releases go to the public [teamz88/whisper-releases](https://github.com/teamz88/whisper-releases)
+repo. It holds release files only; the source stays here. Teammates download
+installers from it, and installed apps check it for updates without a token.
 
-1. Put a `GH_TOKEN` (classic PAT, `repo` scope on this private repo) in
-   `app/.env` — only the person cutting releases needs it.
+1. Put a `GH_TOKEN` (classic PAT with write access to
+   `teamz88/whisper-releases`) in `app/.env`. Only the person cutting releases
+   needs it.
 2. Bump `version` in `app/package.json`.
-3. `cd app && npm run release` — builds and uploads to GitHub Releases.
+3. `cd app && npm run release` for Windows, and `npm run release:mac` on an
+   Apple Silicon Mac. Both upload to the same draft release, `v<version>`.
+4. Open the draft on GitHub, check the files, and publish it. Installed apps
+   only see published releases.
 
 Installed apps check for updates 8 s after launch and hourly, download in the
-background, and install only when the user clicks **Restart now**. Because the
-repo is private, the updater in installed apps needs the token available at
-runtime; for a small internal team either keep the repo's releases public or
-accept shipping a low-privilege token. (For anything beyond internal use, put
-a generic update server in front instead.)
+background, and install only when the user clicks **Restart now**. On macOS
+the updater needs a signed app, so Mac users install new versions by hand
+from the releases page.
 
 > No code signing: Windows SmartScreen will warn on first run —
 > "More info → Run anyway". Expected for internal tooling.
