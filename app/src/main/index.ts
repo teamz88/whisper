@@ -4,6 +4,7 @@ import { hotkeyLabel, parseHotkey, type Profile } from '@whisper/shared';
 
 import { ApiClient } from './api/client.js';
 import { HotkeyListener } from './hotkey/listener.js';
+import { recoverHotkey } from './hotkey/permission.js';
 import { flushClipboardRestore, verifyPasteKeys } from './inject/paste.js';
 import { applySettings, registerIpc, type AppContext } from './ipc.js';
 import { log } from './log.js';
@@ -175,7 +176,7 @@ async function main(): Promise<void> {
   tray.create();
   overlay.create();
   verifyPasteKeys();
-  listener.start();
+  if (!listener.start()) recoverHotkey(listener);
   updates.start();
 
   // Restore the saved session off the critical path.

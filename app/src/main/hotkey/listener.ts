@@ -71,6 +71,7 @@ export class HotkeyListener {
 
   private capturing = false;
   private started = false;
+  private handlersAttached = false;
 
   /** Set when this listener started the current hold; cleared on stop. */
   private holdActive = false;
@@ -139,16 +140,31 @@ export class HotkeyListener {
     });
   }
 
-  start(): void {
-    if (this.started) return;
+  /**
+   * False when the OS refused the hook — on macOS, no Accessibility
+   * permission. Safe to call again later; the handlers attach only once.
+   */
+  start(): boolean {
+    if (this.started) return true;
+
+    if (!this.handlersAttached) {
+      this.handlersAttached = true;
+      uIOhook.on('keydown', (event) => this.handleKeydown(event));
+      uIOhook.on('keyup', (event) => this.handleKeyup(event));
+    }
+
+    try {
+      uIOhook.start();
+    } catch (error) {
+      log.warn(`[hotkey] listener could not start: ${String(error)}`);
+      return false;
+    }
+
     this.started = true;
-
-    uIOhook.on('keydown', (event) => this.handleKeydown(event));
-    uIOhook.on('keyup', (event) => this.handleKeyup(event));
-    uIOhook.start();
-
     log.info(`[hotkey] listener started: ${this.parsed.combo} (${this.parsed.mode} mode)`);
+    return true;
   }
+
 
   /**
    * Must run before app quit: the hook delivers events from a native thread,
