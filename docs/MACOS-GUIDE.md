@@ -20,7 +20,8 @@ If you only want to install Whisper, skip straight to [Part B](#part-b--install-
 
 ### A1. What you need
 
-- A Mac running macOS 13 or newer. Apple Silicon (M1/M2/M3/M4) or Intel both work.
+- An Apple Silicon Mac (M1/M2/M3/M4) running macOS 13 or newer. Intel Macs
+  are not supported: the build is Apple Silicon only.
 - **Xcode Command Line Tools.** Open Terminal and run `xcode-select --install`.
   If it says they are already installed, you are done.
 - **Node.js 22.12 or newer.** Check with `node -v`. If missing, install from
@@ -56,18 +57,22 @@ able to sign in.
 ### A4. Build
 
 ```bash
+npm run build:shared
 cd app
 npm run build:mac
 ```
 
-This compiles the app and packages it. Expect 2–5 minutes. When it finishes,
+Run `build:shared` from the repository root first. It compiles the `shared`
+package the app imports. `npm install` does not build it, and without it the
+build fails with `Failed to resolve entry for package "@whisper/shared"`.
+
+`build:mac` compiles the app and packages it. Expect 2–5 minutes. When it finishes,
 look in `app/release/`:
 
 | File | Who it is for |
 |---|---|
 | `Whisper-<version>-arm64.dmg` | Apple Silicon Macs (M1, M2, M3, M4) |
-| `Whisper-<version>.dmg` | Intel Macs |
-| `Whisper-<version>-arm64-mac.zip`, `Whisper-<version>-mac.zip` | Not needed. Built for the auto-updater, which does not work on unsigned Mac builds (see A6). |
+| `Whisper-<version>-arm64-mac.zip` | Not needed. Built for the auto-updater, which does not work on unsigned Mac builds (see A6). |
 
 The `<version>` comes from `"version"` in `app/package.json`.
 
@@ -96,12 +101,10 @@ is pasted. Only share a build you have launched yourself.
 
 ### A6. Share it with the team
 
-1. Upload **both** `.dmg` files (arm64 and Intel) to wherever the team already
-   gets the Windows installer: shared drive, Slack, Google Drive, or a GitHub
-   Release.
-2. Tell people which one to pick. Easiest rule: **Apple menu → About This Mac.**
-   If it says *Chip: Apple M…*, use the `arm64` file. If it says *Processor:
-   Intel…*, use the other one.
+1. Upload the `.dmg` file to wherever the team already gets the Windows
+   installer: shared drive, Slack, Google Drive, or a GitHub Release.
+2. Tell people it runs on Apple Silicon Macs only. Easiest check: **Apple menu →
+   About This Mac** must say *Chip: Apple M…*. Intel Macs are not supported.
 3. Send them the link to Part B of this guide.
 
 Two things to know when sharing:
@@ -109,7 +112,9 @@ Two things to know when sharing:
 - **The app is not code-signed or notarized.** We have no Apple Developer
   certificate, exactly like the Windows build has no signing certificate.
   macOS will warn on first launch and the user has to approve it once (Part B
-  explains how). This is expected for an internal tool.
+  explains how). This is expected for an internal tool. The build stays
+  unsigned even if your Keychain has an Apple developer certificate:
+  `app/electron-builder.yml` sets `identity: null`.
 - **Updates are manual on macOS.** The Windows app updates itself from GitHub
   Releases. The macOS updater needs a signed app, so it cannot. When you build
   a new version, share the new `.dmg` and ask people to reinstall. It takes
@@ -121,6 +126,7 @@ Two things to know when sharing:
 cd whisper
 git pull
 npm install
+npm run build:shared
 cd app
 npm run build:mac
 ```
@@ -136,14 +142,12 @@ number.
 You need the `.dmg` file from your admin and your Whisper email + temporary
 password. No other software is required.
 
-### B1. Pick the right file
+### B1. Check your Mac
 
 **Apple menu → About This Mac.**
 
 - *Chip: Apple M1 / M2 / M3 / M4* → use **`Whisper-<version>-arm64.dmg`**
-- *Processor: Intel …* → use **`Whisper-<version>.dmg`**
-
-If you grab the wrong one it will not launch; just install the other.
+- *Processor: Intel …* → Whisper does not run on Intel Macs. Tell your admin.
 
 ### B2. Install
 
@@ -238,6 +242,6 @@ upgraded in between.
 | Holding the shortcut does nothing | Grant **Input Monitoring**, then quit and reopen Whisper |
 | I spoke, the overlay showed, but no text appeared | Grant **Accessibility**, then quit and reopen Whisper. Also check that the app you were typing in still had focus. |
 | Nothing is transcribed / the mic check fails | Grant **Microphone**. In Settings, pick the right input device if you have several. |
-| App crashes immediately on launch | You probably installed the Intel build on an Apple Silicon Mac or the other way round. Check B1 and install the matching file. |
+| "Not supported on this type of Mac" / app won't launch | Your Mac has an Intel processor. Whisper runs on Apple Silicon only (B1). |
 | Can't sign in / "cannot reach server" | Check you are online. If it persists, tell your admin — the build may have been made with the wrong server URL (Part A3). |
 | Settings → Updates shows an error | Expected on macOS. Updates are manual (B7). |

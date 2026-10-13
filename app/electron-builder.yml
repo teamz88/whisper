@@ -62,12 +62,16 @@ mac:
     - '!**/node_modules/@nut-tree-fork/libnut-win32/**'
   category: public.app-category.productivity
   icon: build/icon.icns
+  # Apple Silicon only. Intel Macs are not supported.
   target:
     - target: dmg
-      arch: [x64, arm64]
+      arch: [arm64]
     # electron-updater installs macOS updates from the zip, not the dmg.
     - target: zip
-      arch: [x64, arm64]
+      arch: [arm64]
+  # Unsigned on purpose: never pick up a developer certificate from the
+  # builder's Keychain.
+  identity: null
   notarize: false
   extendInfo:
     # Menu-bar app: no Dock icon, no app switcher entry.

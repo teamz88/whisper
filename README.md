@@ -111,9 +111,10 @@ npm run build:icons --workspace @whisper/app   # regenerate icons from build/ico
 cd app && npm run build:win                    # unsigned NSIS installer → app/release/
 ```
 
-macOS builds must be made on a Mac (`npm run build:mac` → .dmg for arm64 and
-x64). Step-by-step build, share and install instructions, including the
-Gatekeeper approval and permission prompts, are in [docs/MACOS-GUIDE.md](docs/MACOS-GUIDE.md).
+macOS builds must be made on an Apple Silicon Mac (`npm run build:mac` → .dmg
+for arm64; Intel Macs are not supported). Step-by-step build, share and install
+instructions, including the Gatekeeper approval and permission prompts, are in
+[docs/MACOS-GUIDE.md](docs/MACOS-GUIDE.md).
 
 Releases (auto-update feed):
 
