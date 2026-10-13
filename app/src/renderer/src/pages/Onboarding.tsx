@@ -103,7 +103,10 @@ function HotkeyStep({ hotkey, mac }: { hotkey: string; mac: boolean }): ReactNod
           ))}
         </div>
         <p className="max-w-xs text-center text-[13px] leading-relaxed text-ink-faint">
-          Try it now — hold the keys and say a word. It&rsquo;ll type wherever your cursor is.
+          {hotkeyVerb(hotkey) === 'Hold'
+            ? 'Try it now — hold the keys and say a word.'
+            : 'Try it now — tap the shortcut, say a word, then tap it again.'}{' '}
+          It&rsquo;ll type wherever your cursor is.
         </p>
       </Card>
     </div>

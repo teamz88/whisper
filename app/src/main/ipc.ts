@@ -61,7 +61,11 @@ export interface AppContext {
  * that acts on them locally: the store (so the hotkey works before the first
  * fetch after a restart), the listener, the overlay position and the tray.
  */
+/** Bumped by every applySettings, so a fetch can tell it was overtaken by a save. */
+let settingsVersion = 0;
+
 export function applySettings(context: AppContext, settings: Settings): void {
+  settingsVersion += 1;
   setStoredSettings(settings);
   context.listener.setHotkey(settings.hotkey);
   context.overlay.setPosition(settings.overlayPosition);
@@ -70,6 +74,21 @@ export function applySettings(context: AppContext, settings: Settings): void {
     parseHotkey(settings.hotkey).mode,
   );
   context.broadcast('settings:changed', settings);
+}
+
+/**
+ * Fetch the user's settings and apply them everywhere at once: the hotkey
+ * listener, the tray, the local mirror and the dashboard. Applying only some
+ * of these let the Settings screen show one shortcut while another was armed.
+ * A response overtaken by a save made meanwhile (the server can take seconds)
+ * is dropped, and the newer settings are returned instead.
+ */
+export async function syncSettingsFromServer(context: AppContext): Promise<Settings> {
+  const versionAtStart = settingsVersion;
+  const settings = await context.api.request<Settings>('/me/settings');
+  if (settingsVersion !== versionAtStart) return getStoredSettings();
+  applySettings(context, settings);
+  return settings;
 }
 
 type Handler<K extends IpcInvokeChannel> = (
@@ -118,8 +137,7 @@ export function registerIpc(context: AppContext): void {
       // Pull the user's settings so the hotkey and overlay match their account
       // from the first dictation on this machine.
       try {
-        const settings = await context.api.request<Settings>('/me/settings');
-        applySettings(context, settings);
+        await syncSettingsFromServer(context);
       } catch (error) {
         log.warn(`[ipc] settings fetch after login failed: ${String(error)}`);
       }
@@ -161,9 +179,7 @@ export function registerIpc(context: AppContext): void {
   handle('settings:get', async () => {
     if (!context.api.hasSession) return getStoredSettings();
     try {
-      const settings = await context.api.request<Settings>('/me/settings');
-      setStoredSettings(settings);
-      return settings;
+      return await syncSettingsFromServer(context);
     } catch (error) {
       // Offline: the local mirror keeps the app usable.
       log.warn(`[ipc] settings fetch failed, using local mirror: ${String(error)}`);

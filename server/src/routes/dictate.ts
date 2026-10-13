@@ -7,6 +7,7 @@ import {
   coerceLanguageCode,
   coerceWritingStyle,
   countWords,
+  normalizeSpaces,
   type DictateResponse,
   type Session,
 } from '@whisper/shared';
@@ -134,7 +135,7 @@ export function registerDictateRoute(
       const prompt = buildVocabularyPrompt(settings.customVocabulary);
 
       const whisperStartedAt = Date.now();
-      const raw = await transcribe(
+      const transcript = await transcribe(
         ai,
         {
           audio,
@@ -147,6 +148,11 @@ export function registerDictateRoute(
         request.log,
       );
       const whisperMs = Date.now() - whisperStartedAt;
+
+      // Lookalike spaces are replaced before anything else sees the text, so
+      // the hallucination check, cleanup, history and the paste all get plain
+      // spaces.
+      const raw = normalizeSpaces(transcript);
 
       const verdict = classifyTranscript(raw);
       if (verdict.hallucination) {
@@ -182,7 +188,7 @@ export function registerDictateRoute(
         }
 
         // 'fallback' deliberately keeps the raw transcript rather than failing.
-        if (result.kind === 'cleaned') cleaned = result.text;
+        if (result.kind === 'cleaned') cleaned = normalizeSpaces(result.text);
       }
 
       const wordCount = countWords(cleaned);

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Menu, shell } from 'electron';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -80,6 +80,27 @@ export class DashboardWindow {
     this.window.webContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('https://')) void shell.openExternal(url);
       return { action: 'deny' };
+    });
+
+    // Electron shows no context menu of its own, so right-click in the sign-in
+    // fields did nothing — no way to paste a password without the keyboard.
+    // Chromium's edit flags already disable Cut and Copy in password fields.
+    this.window.webContents.on('context-menu', (_event, params) => {
+      const flags = params.editFlags;
+      if (params.isEditable) {
+        Menu.buildFromTemplate([
+          { role: 'undo', enabled: flags.canUndo },
+          { role: 'redo', enabled: flags.canRedo },
+          { type: 'separator' },
+          { role: 'cut', enabled: flags.canCut },
+          { role: 'copy', enabled: flags.canCopy },
+          { role: 'paste', enabled: flags.canPaste },
+          { type: 'separator' },
+          { role: 'selectAll', enabled: flags.canSelectAll },
+        ]).popup();
+      } else if (params.selectionText.trim() !== '') {
+        Menu.buildFromTemplate([{ role: 'copy', enabled: flags.canCopy }]).popup();
+      }
     });
 
     const devUrl = process.env['ELECTRON_RENDERER_URL'];

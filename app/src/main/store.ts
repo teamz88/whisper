@@ -27,6 +27,8 @@ interface StoreSchema {
   onboarded: boolean;
   /** Client-side only: preferred input device for recording. */
   micDeviceId: string | null;
+  /** Start-at-login was switched on once; from then on the user's choice stands. */
+  loginItemSet: boolean;
 }
 
 const store = new Store<StoreSchema>({
@@ -36,6 +38,7 @@ const store = new Store<StoreSchema>({
     settings: DEFAULT_SETTINGS,
     onboarded: false,
     micDeviceId: null,
+    loginItemSet: false,
   },
 });
 
@@ -74,6 +77,14 @@ export function getMicDeviceId(): string | null {
 
 export function setMicDeviceId(deviceId: string | null): void {
   store.set('micDeviceId', deviceId);
+}
+
+export function getLoginItemSet(): boolean {
+  return store.get('loginItemSet');
+}
+
+export function setLoginItemSet(set: boolean): void {
+  store.set('loginItemSet', set);
 }
 
 /** Sign-out wipes credentials but keeps device-local preferences. */

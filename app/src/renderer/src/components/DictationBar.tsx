@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { WRITING_STYLES, WRITING_STYLE_LABELS, hotkeyLabel } from '@whisper/shared';
+import { WRITING_STYLES, WRITING_STYLE_LABELS, hotkeyLabel, hotkeyVerb } from '@whisper/shared';
 
 import { useAppState } from '../state/AppState.js';
 import { Pill } from './ui.js';
@@ -18,12 +18,17 @@ export function DictationBar(): ReactNode {
   // a key their keyboard does not have — inches below a header that renders
   // the same combo as ⌃⌘.
   const label = hotkeyLabel(settings.hotkey, { mac: appInfo?.platform === 'darwin' });
+  // A shortcut with a real key (F9) is tapped to start and tapped to stop;
+  // only a modifiers-only combo is held.
+  const verb = hotkeyVerb(settings.hotkey);
 
   const message = recording.active
     ? recording.source === 'hotkey'
-      ? 'Listening — release to insert'
+      ? verb === 'Hold'
+        ? 'Listening — release to insert'
+        : `Listening — tap ${label} again to insert`
       : 'Listening — click to stop'
-    : `Hold ${label} anywhere, or click to dictate`;
+    : `${verb} ${label} anywhere, or click to dictate`;
 
   return (
     <div className="w-full rounded-2xl border border-line bg-cream p-5">

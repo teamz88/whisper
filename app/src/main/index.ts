@@ -4,9 +4,11 @@ import { hotkeyLabel, parseHotkey, type Profile } from '@whisper/shared';
 
 import { ApiClient } from './api/client.js';
 import { HotkeyListener } from './hotkey/listener.js';
+import { recoverHotkey } from './hotkey/permission.js';
 import { flushClipboardRestore, verifyPasteKeys } from './inject/paste.js';
-import { applySettings, registerIpc, type AppContext } from './ipc.js';
+import { registerIpc, syncSettingsFromServer, type AppContext } from './ipc.js';
 import { log } from './log.js';
+import { enableStartAtLoginOnce } from './login-item.js';
 import { RecordingController } from './recording/controller.js';
 import { getStoredSettings } from './store.js';
 import { Updates } from './updates.js';
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
     broadcast,
     waitForModifiersReleased: (timeoutMs): Promise<boolean> =>
       listener.waitForModifiersReleased(timeoutMs),
+    getInputActivity: (): number => listener.getInputActivity(),
   });
 
   // A dead overlay renderer means no audio-ready/audio-empty will ever arrive;
@@ -173,9 +176,10 @@ async function main(): Promise<void> {
   }
 
   tray.create();
+  enableStartAtLoginOnce();
   overlay.create();
   verifyPasteKeys();
-  listener.start();
+  if (!listener.start()) recoverHotkey(listener);
   updates.start();
 
   // Restore the saved session off the critical path.
@@ -186,10 +190,7 @@ async function main(): Promise<void> {
 
     // Sync settings from the server in the background; until it lands, the
     // local mirror keeps the hotkey armed with the last known combo.
-    void api
-      .request<Parameters<typeof applySettings>[1]>('/me/settings')
-      .then((settings) => applySettings(context, settings))
-      .catch(() => undefined);
+    void syncSettingsFromServer(context).catch(() => undefined);
   };
 
   const restored = await api.restoreSession();

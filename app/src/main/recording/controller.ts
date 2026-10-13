@@ -19,7 +19,9 @@ import {
   type OverlayState,
 } from '../../shared/overlay.js';
 import type { ApiClient } from '../api/client.js';
+import { trimSilence } from '../audio/trim.js';
 import { encodeWav, samplesToMs } from '../audio/wav.js';
+import { getFocusedAppName } from '../inject/focused-app.js';
 import { pasteText } from '../inject/paste.js';
 import { log } from '../log.js';
 import { getMicDeviceId } from '../store.js';
@@ -43,6 +45,19 @@ const KEY_RELEASE_GRACE_MS = 600;
  */
 const DICTATE_TIMEOUT_MS = 90_000;
 
+/**
+ * A dictation pasted straight after the previous one gets a joining space
+ * only within this window; after that, focus may have moved without any key
+ * or click (a window popping up), and a stray space is worse than none.
+ */
+const JOIN_WINDOW_MS = 120_000;
+
+/** Text starting with these attaches to the previous text without a space. */
+const NO_SPACE_BEFORE = /^[\s.,;:!?…)\]}»”’%]/u;
+
+/** Chinese, Japanese and Korean are written without spaces between sentences. */
+const CJK = /[\u3000-\u30ff\u3400-\u9fff\uac00-\ud7af\uff00-\uffef]/u;
+
 export interface ControllerDeps {
   overlay: OverlayWindow;
   api: ApiClient;
@@ -51,6 +66,8 @@ export interface ControllerDeps {
   broadcast: <T>(channel: string, payload: T) => void;
   /** Resolves true once no modifier key is held, false on timeout. */
   waitForModifiersReleased: (timeoutMs: number) => Promise<boolean>;
+  /** Changes whenever the user types or clicks — see HotkeyListener. */
+  getInputActivity: () => number;
 }
 
 /** What a finished dictation has to show on the overlay. */
@@ -94,6 +111,9 @@ export class RecordingController {
 
   /** When the last recording ended, for the key-release grace before a paste. */
   private lastStoppedAt = 0;
+
+  /** The last successful paste, to tell whether the next one continues it. */
+  private lastPaste: { text: string; inputActivity: number; at: number } | null = null;
 
   constructor(deps: ControllerDeps) {
     this.deps = deps;
@@ -284,14 +304,24 @@ export class RecordingController {
     durationMs: number,
     generation: number,
   ): Promise<DictateResponse | null> {
-    const samples = new Float32Array(payload.samples);
-    if (samples.length === 0) return null;
+    const captured = new Float32Array(payload.samples);
+    if (captured.length === 0) return null;
 
+    const trimmed = trimSilence(captured, payload.sampleRate);
+    if (trimmed.kind === 'no-speech') {
+      log.info(
+        `[rec] #${generation} no speech in ${samplesToMs(captured.length, payload.sampleRate)}ms of audio, not sent`,
+      );
+      return null;
+    }
+
+    const samples = trimmed.samples;
     const wav = encodeWav(samples, payload.sampleRate);
 
     log.info(
-      `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples, ` +
-        `${(wav.byteLength / 1024).toFixed(0)} kB wav, mic open ${durationMs}ms`,
+      `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples ` +
+        `(${trimmed.trimmedMs}ms of silence trimmed), ${(wav.byteLength / 1024).toFixed(0)} kB wav, ` +
+        `mic open ${durationMs}ms`,
     );
 
     // Field order is a protocol detail, not a style choice: the server reads
@@ -349,7 +379,16 @@ export class RecordingController {
       }
     } while (this.listening);
 
-    const outcome = await pasteText(response.cleaned);
+    const text = this.joinWithPrevious(response.cleaned);
+    // Diagnostics only, never awaited: which app had focus when the keystroke
+    // went out tells a paste that landed elsewhere from one that was never sent.
+    void getFocusedAppName().then((focused) => {
+      log.info(`[rec] #${generation} focus at paste: ${focused ?? 'unknown'}`);
+    });
+    const outcome = await pasteText(text);
+    if (outcome.pasted) {
+      this.lastPaste = { text, inputActivity: this.deps.getInputActivity(), at: Date.now() };
+    }
     log.info(
       `[rec] #${generation} ${outcome.pasted ? `pasted via ${outcome.method}` : `not pasted (${outcome.error ?? 'unknown'})`}` +
         ` after waiting ${Date.now() - waitStartedAt}ms`,
@@ -386,6 +425,21 @@ export class RecordingController {
       wordCount: response.wordCount,
       pasted: outcome.pasted,
     };
+  }
+
+  /**
+   * Two dictations in a row would otherwise glue together ("paper.Second").
+   * When nothing has typed or clicked since the previous paste, the caret is
+   * still right after it, so the new text gets a leading space.
+   */
+  private joinWithPrevious(text: string): string {
+    const last = this.lastPaste;
+    if (last === null) return text;
+    if (this.deps.getInputActivity() !== last.inputActivity) return text;
+    if (Date.now() - last.at > JOIN_WINDOW_MS) return text;
+    if (/\s$/u.test(last.text) || NO_SPACE_BEFORE.test(text)) return text;
+    if (CJK.test(last.text.slice(-1)) || CJK.test(text.charAt(0))) return text;
+    return ` ${text}`;
   }
 
   /**

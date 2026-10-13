@@ -52,6 +52,18 @@ export function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
+/**
+ * Spaces that look like a normal space but are not one. Whisper writes
+ * "3 p.m." with a narrow no-break space (U+202F), which breaks text search,
+ * code and CSV wherever the text is pasted. The ideographic space (U+3000) is
+ * real CJK spacing and stays.
+ */
+const LOOKALIKE_SPACES = /[  -   ]/gu;
+
+export function normalizeSpaces(text: string): string {
+  return text.replace(LOOKALIKE_SPACES, ' ');
+}
+
 /** Typing speed assumed when converting words dictated into time saved. */
 export const ASSUMED_TYPING_WPM = 40;
 

@@ -112,12 +112,13 @@ export function AppStateProvider({ children }: { children: ReactNode }): ReactNo
    */
   const loadUserData = useCallback(async () => {
     try {
-      const [nextSettings] = await Promise.all([
-        bridge.invoke('settings:get'),
-        refreshStats(),
-        refreshRecent(),
-      ]);
-      if (mounted.current) setSettings(nextSettings);
+      // Settings are set the moment they arrive: waiting for the (slower)
+      // stats call let a shortcut saved in the meantime be overwritten on
+      // screen by this older response.
+      const loadSettings = bridge.invoke('settings:get').then((nextSettings) => {
+        if (mounted.current) setSettings(nextSettings);
+      });
+      await Promise.all([loadSettings, refreshStats(), refreshRecent()]);
     } catch {
       // Keep the defaults; the next settings save or broadcast corrects them.
     }

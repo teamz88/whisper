@@ -60,6 +60,9 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Whisper
   deleteAppDataOnUninstall: false
+  # Start Whisper when the installer finishes (the "Run Whisper" box on the
+  # last page). This is electron-builder's default, spelled out on purpose.
+  runAfterFinish: true
   artifactName: ${productName}-Setup-${version}.${ext}
 
 mac:
