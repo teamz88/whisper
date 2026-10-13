@@ -7,10 +7,11 @@ on macOS the equivalent is a **`.dmg` disk image**.
 
 This guide has two parts:
 
-- **Part A — Build the .dmg.** For the one person with a Mac who creates the
-  installer. Needs a Mac; the build cannot run on Windows.
+- **Part A — Build and release the .dmg.** For the one person with a Mac who
+  cuts releases. Needs a Mac; the build cannot run on Windows.
 - **Part B — Install Whisper.** For everyone else on a Mac. No terminal, no
-  developer tools, just the `.dmg` file.
+  developer tools, just the `.dmg` file from
+  [teamz88/whisper-releases](https://github.com/teamz88/whisper-releases/releases/latest).
 
 If you only want to install Whisper, skip straight to [Part B](#part-b--install-whisper-on-your-mac).
 
@@ -72,7 +73,7 @@ look in `app/release/`:
 | File | Who it is for |
 |---|---|
 | `Whisper-<version>-arm64.dmg` | Apple Silicon Macs (M1, M2, M3, M4) |
-| `Whisper-<version>-arm64-mac.zip` | Not needed. Built for the auto-updater, which does not work on unsigned Mac builds (see A6). |
+| `Whisper-<version>-arm64-mac.zip` | Not used for installing. `release:mac` uploads it with the release because it is the auto-updater's format, but the updater does not work on unsigned Mac builds (see A6). |
 
 The `<version>` comes from `"version"` in `app/package.json`.
 
@@ -99,13 +100,28 @@ would, including the "Open Anyway" step and the three permission prompts. Sign
 in, hold the shortcut in any text field, say a sentence, and confirm the text
 is pasted. Only share a build you have launched yourself.
 
-### A6. Share it with the team
+### A6. Publish it
 
-1. Upload the `.dmg` file to wherever the team already gets the Windows
-   installer: shared drive, Slack, Google Drive, or a GitHub Release.
-2. Tell people it runs on Apple Silicon Macs only. Easiest check: **Apple menu →
-   About This Mac** must say *Chip: Apple M…*. Intel Macs are not supported.
-3. Send them the link to Part B of this guide.
+Releases live in the public
+[teamz88/whisper-releases](https://github.com/teamz88/whisper-releases) repo.
+It holds release files only, so anyone with the link can download an
+installer without a GitHub account. The Windows installer is published there
+too.
+
+1. Add a `GH_TOKEN` line to the same `app/.env` from A3: a classic GitHub
+   token with write access to `teamz88/whisper-releases` (see the README).
+   `.env` is never packed into the app; the build only includes `out/` and
+   `package.json`.
+2. From `app/`, run `npm run release:mac` instead of `build:mac`. It builds
+   and uploads the `.dmg`, the `.zip` and `latest-mac.yml` into a **draft**
+   release `v<version>`. The Windows build (`npm run release`, on any machine)
+   uploads into the same draft.
+3. Open the draft on GitHub, check that the files for both platforms are
+   there, and click **Publish release**. Nothing reaches users before that.
+4. Send people the link
+   <https://github.com/teamz88/whisper-releases/releases/latest> and Part B of
+   this guide. Remind them it runs on Apple Silicon Macs only: **Apple menu →
+   About This Mac** must say *Chip: Apple M…*.
 
 Two things to know when sharing:
 
@@ -115,10 +131,11 @@ Two things to know when sharing:
   explains how). This is expected for an internal tool. The build stays
   unsigned even if your Keychain has an Apple developer certificate:
   `app/electron-builder.yml` sets `identity: null`.
-- **Updates are manual on macOS.** The Windows app updates itself from GitHub
-  Releases. The macOS updater needs a signed app, so it cannot. When you build
-  a new version, share the new `.dmg` and ask people to reinstall. It takes
-  one drag-and-drop and keeps their sign-in and settings.
+- **Updates are manual on macOS.** The Windows app updates itself from
+  `teamz88/whisper-releases`. The macOS updater needs a signed app, so it
+  cannot. When a new version is published, tell Mac users to download the new
+  `.dmg` and reinstall. It takes one drag-and-drop and keeps their sign-in and
+  settings.
 
 ### A7. Building a new version later
 
@@ -128,19 +145,21 @@ git pull
 npm install
 npm run build:shared
 cd app
-npm run build:mac
+npm run release:mac
 ```
 
 Bump `"version"` in `app/package.json` first if the Windows release has not
 already done so, so the filename and the Settings → About screen show the new
-number.
+number. Then publish the draft as in A6.
 
 ---
 
 ## Part B — Install Whisper on your Mac
 
-You need the `.dmg` file from your admin and your Whisper email + temporary
-password. No other software is required.
+You need the `.dmg` file and your Whisper email + temporary password (ask your
+admin). Download **`Whisper-<version>-arm64.dmg`** from
+<https://github.com/teamz88/whisper-releases/releases/latest>; no GitHub
+account needed. No other software is required.
 
 ### B1. Check your Mac
 
@@ -226,9 +245,10 @@ same as on Windows. See the [Team Guide](TEAM-GUIDE.md) from section 3 onward.
 
 ### B7. Updating
 
-Whisper does not update itself on macOS. When your admin shares a new `.dmg`,
-install it the same way: open it, drag Whisper onto Applications, click
-**Replace** when asked. Your sign-in and settings are kept. You will not be
+Whisper does not update itself on macOS. When a new version appears on the
+[releases page](https://github.com/teamz88/whisper-releases/releases/latest),
+download its `.dmg` and install it the same way: open it, drag Whisper onto
+Applications, click **Replace** when asked. Your sign-in and settings are kept. You will not be
 asked to approve the app or re-grant permissions again unless macOS has been
 upgraded in between.
 
