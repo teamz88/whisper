@@ -64,6 +64,7 @@ async function main(): Promise<void> {
     broadcast,
     waitForModifiersReleased: (timeoutMs): Promise<boolean> =>
       listener.waitForModifiersReleased(timeoutMs),
+    getInputActivity: (): number => listener.getInputActivity(),
   });
 
   // A dead overlay renderer means no audio-ready/audio-empty will ever arrive;

@@ -72,6 +72,7 @@ export class HotkeyListener {
   private capturing = false;
   private started = false;
   private handlersAttached = false;
+  private inputActivity = 0;
 
   /** Set when this listener started the current hold; cleared on stop. */
   private holdActive = false;
@@ -151,6 +152,9 @@ export class HotkeyListener {
       this.handlersAttached = true;
       uIOhook.on('keydown', (event) => this.handleKeydown(event));
       uIOhook.on('keyup', (event) => this.handleKeyup(event));
+      uIOhook.on('mousedown', () => {
+        this.inputActivity += 1;
+      });
     }
 
     try {
@@ -165,6 +169,14 @@ export class HotkeyListener {
     return true;
   }
 
+  /**
+   * Bumped by anything that may have moved the caret: a key that is neither a
+   * modifier nor the shortcut itself, or a mouse click. Unchanged since the
+   * last paste means the caret still sits right after that text.
+   */
+  getInputActivity(): number {
+    return this.inputActivity;
+  }
 
   /**
    * Must run before app quit: the hook delivers events from a native thread,
@@ -224,7 +236,15 @@ export class HotkeyListener {
 
   private handleKeydown(event: UiohookKeyboardEvent): void {
     this.trackModifiers(event, true);
-    if (this.capturing || isHotkeySuppressed()) return;
+    if (isHotkeySuppressed()) return; // our own synthetic paste
+    if (
+      !isModifierKeycode(event.keycode) &&
+      event.keycode !== this.keyKeycode &&
+      event.keycode !== ESCAPE_KEYCODE
+    ) {
+      this.inputActivity += 1;
+    }
+    if (this.capturing) return;
 
     const now = Date.now();
     const previousDownAt = this.lastKeydownAt.get(event.keycode) ?? 0;
