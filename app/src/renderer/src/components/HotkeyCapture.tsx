@@ -60,7 +60,8 @@ export function HotkeyCapture({
   onChange,
 }: {
   value: string;
-  onChange: (hotkey: string) => void;
+  /** Saves the shortcut; a rejection is shown under the control. */
+  onChange: (hotkey: string) => Promise<unknown>;
 }): ReactNode {
   const { appInfo } = useAppState();
   const mac = appInfo?.platform === 'darwin';
@@ -83,6 +84,14 @@ export function HotkeyCapture({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // The save goes to the server, which can time out. Without this the old
+  // shortcut silently stayed armed while the user believed the new one was set.
+  const save = (combo: string): void => {
+    onChangeRef.current(combo).catch(() => {
+      setError('Couldn’t save the shortcut — the server didn’t answer. Try again.');
+    });
+  };
+
   useEffect(() => {
     if (!capturing) return undefined;
 
@@ -98,7 +107,7 @@ export function HotkeyCapture({
         return;
       }
       setCapturing(false);
-      onChangeRef.current(combo);
+      save(combo);
     };
 
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -191,7 +200,7 @@ export function HotkeyCapture({
           disabled={value === DEFAULT_HOTKEY}
           onClick={() => {
             setError(null);
-            onChange(DEFAULT_HOTKEY);
+            save(DEFAULT_HOTKEY);
           }}
         >
           Reset to default

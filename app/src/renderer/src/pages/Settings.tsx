@@ -208,9 +208,7 @@ export function Settings(): ReactNode {
             control={
               <HotkeyCapture
                 value={settings.hotkey}
-                onChange={(hotkey) => {
-                  void bridge.invoke('hotkey:set', { hotkey });
-                }}
+                onChange={(hotkey) => bridge.invoke('hotkey:set', { hotkey })}
               />
             }
           />
