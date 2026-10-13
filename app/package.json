@@ -21,6 +21,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "release": "npm run build && dotenv -e .env -- electron-builder --win --publish always",
+    "release:mac": "npm run build && dotenv -e .env -- electron-builder --mac --publish always",
     "postinstall": "electron-builder install-app-deps || echo Skipped native rebuild - uiohook-napi and nut-js ship prebuilt N-API binaries"
   },
   "dependencies": {

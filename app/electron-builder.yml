@@ -92,12 +92,16 @@ mac:
 dmg:
   title: ${productName} ${version}
 
+# Installed apps update from here. It is a public repo holding release files
+# only, because the updater in installed apps carries no token and could never
+# read releases from the private code repo (every update check was a 404).
+# Uploads land in a draft: Windows and Mac builds go into the same release, and
+# nothing reaches users until someone publishes it on GitHub.
 publish:
   - provider: github
     owner: teamz88
-    repo: whisper
-    private: true
-    releaseType: release
+    repo: whisper-releases
+    releaseType: draft
 
 # Neither native dependency needs rebuilding: uiohook-napi and nut-js are both
 # pure N-API with prebuilt binaries for win32-x64, so they are ABI-stable across
