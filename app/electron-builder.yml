@@ -35,7 +35,12 @@ extraResources:
     to: icon.ico
 
 win:
+  # A platform `files` list made only of exclusions is treated as "**/*" plus
+  # those exclusions, which packed app/.env, src/ and old release builds into
+  # app.asar. Each platform list therefore repeats the inclusions.
   files:
+    - out/**/*
+    - package.json
     - "!**/node_modules/@nut-tree-fork/libnut-darwin/**"
   target:
     - target: nsis
@@ -58,7 +63,10 @@ nsis:
   artifactName: ${productName}-Setup-${version}.${ext}
 
 mac:
+  # Inclusions repeated on purpose — see win.files.
   files:
+    - out/**/*
+    - package.json
     - '!**/node_modules/@nut-tree-fork/libnut-win32/**'
   category: public.app-category.productivity
   icon: build/icon.icns

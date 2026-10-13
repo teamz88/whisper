@@ -82,6 +82,7 @@ async function main(): Promise<void> {
       controller.startRecording('hotkey');
     },
     onStop: () => controller.stopRecording('hotkey'),
+    onCancel: () => controller.cancelRecording('hotkey was part of another shortcut'),
     isListening: () => controller.isListening(),
   });
 
@@ -142,6 +143,12 @@ async function main(): Promise<void> {
     // dashboard's 'close' handler preventDefault()s it, the quit is silently
     // aborted while the installer is already launching. Same for macOS Cmd+Q.
     dashboard.quitting = true;
+
+    // The overlay is created with closable: false, and on macOS app.quit()
+    // asks every window to close — a non-closable one cancels the whole quit
+    // (tray Quit, Cmd+Q, AppleScript quit and SIGTERM all just do nothing).
+    // destroy() skips the close request.
+    overlay.dispose();
   });
 
   app.on('will-quit', () => {

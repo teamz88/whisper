@@ -108,6 +108,19 @@ export class RecordingController {
     log.info(`[rec] stop (${reason})`);
   }
 
+  /**
+   * Like stop, but nothing is uploaded or pasted. The generation bump makes
+   * any audio the overlay still flushes for this recording stale.
+   */
+  cancelRecording(reason: string): void {
+    if (this.phase !== 'listening') return;
+
+    this.generation += 1;
+    this.finishQuietly();
+
+    log.info(`[rec] cancelled (${reason})`);
+  }
+
   /** The dashboard Dictation Bar — and the universal stop for any recording. */
   toggle(): RecordingState {
     if (this.phase === 'listening') {
