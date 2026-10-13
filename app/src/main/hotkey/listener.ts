@@ -89,8 +89,9 @@ export class HotkeyListener {
   /**
    * Modifier keys physically down, for the paste: a synthetic Ctrl+V sent
    * while the user still holds Win arrives as Win+Ctrl+V and opens a system
-   * panel instead of pasting. Tracked from keydown/keyup pairs, and pruned by
-   * every event's modifier flags so an eaten keyup cannot pin a key down.
+   * panel instead of pasting. Tracked from keydown/keyup pairs and pruned by
+   * every event's modifier flags — but Windows can drop a Win keyup entirely,
+   * so callers only ever wait on this briefly.
    */
   private heldModifiers = new Set<number>();
   private releaseWaiters: Array<() => void> = [];
@@ -120,10 +121,7 @@ export class HotkeyListener {
     this.capturing = capturing;
   }
 
-  /**
-   * Resolves true once no modifier is held, or false if one still is after
-   * `timeoutMs` — the caller must not send a synthetic shortcut then.
-   */
+  /** Resolves true once no modifier is held, or false if one still looks held after `timeoutMs`. */
   waitForModifiersReleased(timeoutMs: number): Promise<boolean> {
     if (this.heldModifiers.size === 0) return Promise.resolve(true);
 

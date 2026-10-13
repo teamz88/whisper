@@ -29,12 +29,13 @@ import type { OverlayWindow } from '../windows/overlay.js';
 const OVERLAY_FALLBACK_FADE_MS = 5_000;
 
 /**
- * How long a finished dictation waits for every modifier to come up before it
- * gives up on the keystroke and leaves the text on the clipboard. Letting go
- * of a hold combo takes a fraction of a second; this only runs out when a key
- * really is still held, or its keyup was lost.
+ * After a recording stops, a paste waits up to this long for the modifiers to
+ * come up — the other key of a hold combo is often still down for a moment.
+ * Then it pastes regardless: Windows sometimes never reports a Win keyup, and
+ * trusting a key tracker that missed one meant no dictation got pasted at all.
+ * A result arriving later than this after the stop is pasted straight away.
  */
-const KEY_RELEASE_TIMEOUT_MS = 3_000;
+const KEY_RELEASE_GRACE_MS = 600;
 
 /**
  * Pastes wait for every earlier dictation, so one hung upload would hold back
@@ -90,6 +91,9 @@ export class RecordingController {
   private pasteQueue: Promise<void> = Promise.resolve();
 
   private notListeningWaiters: Array<() => void> = [];
+
+  /** When the last recording ended, for the key-release grace before a paste. */
+  private lastStoppedAt = 0;
 
   constructor(deps: ControllerDeps) {
     this.deps = deps;
@@ -330,19 +334,22 @@ export class RecordingController {
       return { kind: 'quiet' };
     }
 
-    // Never paste into a live recording, and never with a modifier down: the
-    // synthetic Ctrl+V sent while Win is still held arrives as Win+Ctrl+V, a
-    // system shortcut. A recording that starts during the wait means waiting
-    // again.
+    // Never paste into a live recording, and not while the hotkey that just
+    // stopped one may still be down: the synthetic Ctrl+V sent while Win is
+    // held arrives as Win+Ctrl+V, a system shortcut. A recording that starts
+    // during the wait means waiting again.
     const waitStartedAt = Date.now();
     if (this.listening) log.info(`[rec] #${generation} ready, waiting for the live recording to end`);
-    let keysUp: boolean;
     do {
       await this.whenNotListening();
-      keysUp = await this.deps.waitForModifiersReleased(KEY_RELEASE_TIMEOUT_MS);
+      const sinceStop = Date.now() - this.lastStoppedAt;
+      if (sinceStop < KEY_RELEASE_GRACE_MS) {
+        const released = await this.deps.waitForModifiersReleased(KEY_RELEASE_GRACE_MS - sinceStop);
+        if (!released) log.warn(`[rec] #${generation} modifiers still look held — pasting anyway`);
+      }
     } while (this.listening);
 
-    const outcome = await pasteText(response.cleaned, { press: keysUp });
+    const outcome = await pasteText(response.cleaned);
     log.info(
       `[rec] #${generation} ${outcome.pasted ? `pasted via ${outcome.method}` : `not pasted (${outcome.error ?? 'unknown'})`}` +
         ` after waiting ${Date.now() - waitStartedAt}ms`,
@@ -417,6 +424,7 @@ export class RecordingController {
   private endListening(): void {
     this.listening = false;
     this.source = null;
+    this.lastStoppedAt = Date.now();
     const waiters = this.notListeningWaiters;
     this.notListeningWaiters = [];
     for (const resolve of waiters) resolve();
