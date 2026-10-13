@@ -11,7 +11,9 @@ Slack, Notion, Telegram, your IDE, anywhere you can type.
 > On a Mac? See the [macOS Guide](MACOS-GUIDE.md) — install steps, the
 > one-time "Open Anyway" approval, and the permissions Whisper needs.
 
-1. Get **`Whisper-Setup-<version>.exe`** from your admin.
+1. Download **`Whisper-Setup-<version>.exe`** from
+   <https://github.com/teamz88/whisper-releases/releases/latest>. No GitHub
+   account needed.
 2. Run it. Windows SmartScreen will warn because the app is unsigned — click
    **More info → Run anyway**. (Internal tool; this is expected.)
 3. Whisper installs per-user and starts in the **system tray** (bottom-right,
@@ -92,7 +94,8 @@ also turn AI cleanup off entirely and get the raw transcription.
 Everything lives in Settings → Team:
 
 - **Add a teammate:** Add user (email + temp password + role), then send them
-  the installer and their credentials.
+  their credentials and the download link,
+  <https://github.com/teamz88/whisper-releases/releases/latest>.
 - **Edit anyone:** change their email, name or role, or set a **new temporary
   password** — that's also the "forgot my password" fix. A password change
   signs them out everywhere.
