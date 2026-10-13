@@ -31,6 +31,7 @@ export class OverlayWindow {
   private position: OverlayPosition;
   private state: OverlayState = { kind: 'idle' };
   private hideTimer: NodeJS.Timeout | null = null;
+  private disposed = false;
 
   /**
    * Fired when the overlay's renderer process dies. The recording controller
@@ -46,7 +47,7 @@ export class OverlayWindow {
 
   /** Created eagerly at app start so the first dictation does not pay for it. */
   create(): void {
-    if (this.window !== null) return;
+    if (this.window !== null || this.disposed) return;
 
     this.window = new BrowserWindow({
       width: OVERLAY_WIDTH,
@@ -155,6 +156,12 @@ export class OverlayWindow {
     if (this.hideTimer !== null) clearTimeout(this.hideTimer);
     this.window?.destroy();
     this.window = null;
+  }
+
+  /** For quit: destroy and never recreate, or the new window blocks the quit again. */
+  dispose(): void {
+    this.disposed = true;
+    this.destroy();
   }
 
   private show(): void {
