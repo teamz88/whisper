@@ -33,6 +33,8 @@ export interface HotkeyCallbacks {
   /** Must return immediately; heavy work happens after the handler returns. */
   onStart: (source: TriggerSource) => void;
   onStop: (source: TriggerSource) => void;
+  /** The hold was the start of another shortcut: drop the audio, paste nothing. */
+  onCancel: () => void;
   /** True while the mic is actually open (overlay in 'listening'). */
   isListening: () => boolean;
 }
@@ -50,6 +52,15 @@ const REPRESS_MIN_AGE_MS = 250;
  */
 const REPRESS_GAP_MS = 1400;
 
+/**
+ * The exact-match check only runs when a combo key goes down, so Ctrl+Cmd
+ * followed by Shift (on the way to Ctrl+Cmd+Shift+4) has already started a
+ * recording. Any other key this soon after the start means the combo was part
+ * of a different shortcut, and the recording is cancelled. Later than this, a
+ * stray key is ignored rather than throwing away speech.
+ */
+const CHORD_CANCEL_WINDOW_MS = 1000;
+
 export class HotkeyListener {
   private readonly callbacks: HotkeyCallbacks;
 
@@ -63,6 +74,13 @@ export class HotkeyListener {
   /** Set when this listener started the current hold; cleared on stop. */
   private holdActive = false;
   private holdTriggeredAt = 0;
+
+  /**
+   * Set when a chord cancelled the hold; the combo stays dead until it is let
+   * go. Otherwise Windows' modifier auto-repeat restarts the recording the
+   * moment the extra key comes up while the combo is still held.
+   */
+  private chordBlocked = false;
 
   /** Last keydown per keycode, for the auto-repeat vs re-press distinction. */
   private lastKeydownAt = new Map<number, number>();
@@ -82,6 +100,7 @@ export class HotkeyListener {
     this.parsed = parseHotkey(hotkey);
     this.compile();
     this.holdActive = false;
+    this.chordBlocked = false;
     this.toggleKeyDown = false;
     log.info(`[hotkey] armed: ${this.parsed.combo} (${this.parsed.mode} mode)`);
   }
@@ -155,9 +174,21 @@ export class HotkeyListener {
   }
 
   private handleHoldKeydown(event: UiohookKeyboardEvent, now: number, previousDownAt: number): void {
-    if (!this.requiredKeycodes.has(event.keycode)) return;
-
     const state = readModifierState(event);
+
+    // Read from the event flags, not only from our keyup: an eaten keyup must
+    // not leave the combo blocked forever.
+    if (this.chordBlocked && !modifiersSatisfied(state, this.parsed.modifiers, { exact: false })) {
+      this.chordBlocked = false;
+    }
+
+    if (!this.requiredKeycodes.has(event.keycode)) {
+      this.cancelIfChord(event.keycode, now);
+      return;
+    }
+
+    if (this.chordBlocked) return;
+
     const listening = this.callbacks.isListening();
 
     if (!listening) {
@@ -189,6 +220,18 @@ export class HotkeyListener {
       this.holdActive = false;
       this.callbacks.onStop('repress');
     }
+  }
+
+  private cancelIfChord(keycode: number, now: number): void {
+    if (!this.holdActive || !this.callbacks.isListening()) return;
+    if (now - this.holdTriggeredAt > CHORD_CANCEL_WINDOW_MS) return;
+    // The menu guard's own synthetic Ctrl tap is not the user's chord, even if
+    // it reaches the hook after the suppression window.
+    if (needsMenuGuard(this.parsed) && MODIFIER_KEYCODES.Ctrl.includes(keycode)) return;
+
+    this.holdActive = false;
+    this.chordBlocked = true;
+    this.callbacks.onCancel();
   }
 
   private handleToggleKeydown(event: UiohookKeyboardEvent, now: number, previousDownAt: number): void {
@@ -230,6 +273,8 @@ export class HotkeyListener {
       }
       return;
     }
+
+    if (this.requiredKeycodes.has(event.keycode)) this.chordBlocked = false;
 
     // Hold mode: releasing ANY key of the combo ends the recording — but only
     // a recording THIS listener started. Without the holdActive guard, tapping

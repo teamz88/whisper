@@ -45,7 +45,19 @@ export function OverlayApp(): ReactNode {
 
   useEffect(() => {
     const recorder = recorderRef.current;
-    if (recorder === null || state.kind === 'idle') return;
+    if (recorder === null) return;
+
+    if (state.kind === 'idle') {
+      // Straight from listening to idle is a cancel: close the mic and throw
+      // the capture away — main already considers this dictation over.
+      if (wasListening.current) {
+        wasListening.current = false;
+        opsRef.current = opsRef.current.then(async () => {
+          await recorder.stop();
+        });
+      }
+      return;
+    }
 
     const isFirst = firstNonIdleState.current;
     firstNonIdleState.current = false;

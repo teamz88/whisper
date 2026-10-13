@@ -125,6 +125,9 @@ export class OverlayWindow {
     }
 
     if (state.kind === 'idle') {
+      // The renderer must see it too: idle straight from listening is a
+      // cancel, and the mic it holds has to close.
+      this.window?.webContents.send('overlay:state', state);
       this.hide();
       return;
     }

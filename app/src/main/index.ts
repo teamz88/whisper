@@ -82,6 +82,7 @@ async function main(): Promise<void> {
       controller.startRecording('hotkey');
     },
     onStop: () => controller.stopRecording('hotkey'),
+    onCancel: () => controller.cancelRecording('hotkey was part of another shortcut'),
     isListening: () => controller.isListening(),
   });
 
