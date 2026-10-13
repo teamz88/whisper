@@ -140,6 +140,16 @@ export async function pasteText(text: string): Promise<PasteOutcome> {
   writeText(text);
   await delay(CLIPBOARD_SETTLE_MS);
 
+  // The write can fail while another program holds the clipboard open, and a
+  // clipboard manager or test tool can replace our text before the keystroke.
+  // Either way the paste would insert their content, or nothing.
+  if (readText() !== text) {
+    log.warn('[paste] clipboard did not hold the text before the keystroke — writing it again');
+    writeText(text);
+    await delay(CLIPBOARD_SETTLE_MS);
+    if (readText() !== text) log.warn('[paste] clipboard still holds something else — pasting anyway');
+  }
+
   suppressHotkeyFor(SUPPRESS_MS);
 
   let method: PasteMethod = 'none';
