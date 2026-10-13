@@ -6,6 +6,7 @@ import {
   WRITING_STYLE_LABELS,
   hotkeyHint,
   hotkeyLabel,
+  hotkeyVerb,
   type WritingStyle,
 } from '@whisper/shared';
 
@@ -84,7 +85,9 @@ function HotkeyStep({ hotkey, mac }: { hotkey: string; mac: boolean }): ReactNod
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold text-ink">Hold {label} anywhere to dictate</h1>
+        <h1 className="text-xl font-semibold text-ink">
+          {hotkeyVerb(hotkey)} {label} anywhere to dictate
+        </h1>
         <p className="mt-1.5 text-sm text-ink-soft">{hotkeyHint(hotkey, { mac })}</p>
       </div>
 

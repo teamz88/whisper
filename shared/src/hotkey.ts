@@ -123,6 +123,11 @@ export function hotkeyLabel(input: string | null | undefined, options: HotkeyLab
   return mac ? parts.join('') : parts.join(' + ');
 }
 
+/** "Hold" for a modifiers-only combo, "Tap" for one with a real key (toggle mode). */
+export function hotkeyVerb(input: string | null | undefined): 'Hold' | 'Tap' {
+  return parseHotkey(input).mode === 'hold' ? 'Hold' : 'Tap';
+}
+
 /** The hint under the Settings shortcut row. */
 export function hotkeyHint(input: string | null | undefined, options: HotkeyLabelOptions = {}): string {
   const parsed = parseHotkey(input);
