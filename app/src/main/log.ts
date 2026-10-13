@@ -6,8 +6,9 @@ import { app } from 'electron';
 /**
  * Timestamped logging for the main process. Electron pipes the console to the
  * terminal in dev; the packaged app has no console anyone can read, so every
- * line also goes to main.log in the app's logs folder
- * (%APPDATA%\Whisper\logs on Windows, ~/Library/Logs/Whisper on macOS).
+ * line also goes to main.log in the app's logs folder. Electron names that
+ * folder after package.json "name", so it is ~/Library/Logs/@whisper/app on
+ * macOS; the tray's Open Logs Folder item finds it on every platform.
  */
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
