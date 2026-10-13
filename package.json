@@ -21,6 +21,7 @@
     "migrate": "npm run migrate --workspace @whisper/server",
     "create-user": "npm run create-user --workspace @whisper/server --",
     "smoke": "npm run smoke --workspace @whisper/server --",
+    "test": "npm run build:shared && npm run test --workspace @whisper/app",
     "clean": "node -e \"for (const d of ['shared/dist','server/dist','app/out','app/release']) require('node:fs').rmSync(d,{recursive:true,force:true})\""
   },
   "devDependencies": {

@@ -18,6 +18,7 @@
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "build:icons": "node scripts/build-icons.mjs",
+    "test": "node --experimental-test-module-mocks --import tsx --test \"test/**/*.test.ts\"",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "release": "npm run build && dotenv -e .env -- electron-builder --win --publish always",
@@ -46,6 +47,7 @@
     "react-dom": "19.2.8",
     "sharp": "^0.34.0",
     "tailwindcss": "4.3.3",
+    "tsx": "4.23.12",
     "typescript": "5.9.3",
     "vite": "7.3.6"
   }
