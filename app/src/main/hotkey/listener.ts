@@ -134,6 +134,7 @@ export class HotkeyListener {
       };
       const timer = setTimeout(() => {
         this.releaseWaiters = this.releaseWaiters.filter((w) => w !== waiter);
+        log.warn(`[hotkey] modifiers still held after ${timeoutMs}ms: keycodes ${[...this.heldModifiers].join(', ')}`);
         resolve(false);
       }, timeoutMs);
       this.releaseWaiters.push(waiter);

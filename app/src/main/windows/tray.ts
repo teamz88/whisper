@@ -15,6 +15,8 @@ import { log } from '../log.js';
 export interface TrayCallbacks {
   onOpenDashboard: () => void;
   onSignOut: () => void;
+  /** For bug reports: the packaged app's only log is a file. */
+  onOpenLogs: () => void;
   onQuit: () => void;
 }
 
@@ -116,6 +118,7 @@ export class AppTray {
       { label: `Dictate: ${this.verb()} ${this.hotkeyLabel}`, enabled: false },
       { type: 'separator' },
       { label: 'Sign Out', click: () => this.callbacks.onSignOut() },
+      { label: 'Open Logs Folder', click: () => this.callbacks.onOpenLogs() },
       { label: 'Quit Whisper', click: () => this.callbacks.onQuit() },
     ]);
 

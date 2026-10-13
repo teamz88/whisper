@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, shell } from 'electron';
 
 import { hotkeyLabel, parseHotkey, type Profile } from '@whisper/shared';
 
@@ -103,6 +103,7 @@ async function main(): Promise<void> {
     {
       onOpenDashboard: openDashboard,
       onSignOut: () => void api.logout(),
+      onOpenLogs: () => void shell.openPath(app.getPath('logs')),
       onQuit: () => {
         dashboard.quitting = true;
         app.quit();

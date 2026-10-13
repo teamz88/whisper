@@ -36,6 +36,12 @@ const OVERLAY_FALLBACK_FADE_MS = 5_000;
  */
 const KEY_RELEASE_TIMEOUT_MS = 3_000;
 
+/**
+ * Pastes wait for every earlier dictation, so one hung upload would hold back
+ * all the ones after it. A 10-minute recording transcribes well within this.
+ */
+const DICTATE_TIMEOUT_MS = 90_000;
+
 export interface ControllerDeps {
   overlay: OverlayWindow;
   api: ApiClient;
@@ -121,7 +127,7 @@ export class RecordingController {
     });
     this.broadcastState();
 
-    log.info(`[rec] start (${source})`);
+    log.info(`[rec] #${this.generation} start (${source})`);
   }
 
   /**
@@ -136,7 +142,7 @@ export class RecordingController {
     this.setOverlay({ kind: 'processing' });
     this.broadcastState();
 
-    log.info(`[rec] stop (${reason})`);
+    log.info(`[rec] #${this.generation} stop (${reason})`);
   }
 
   /**
@@ -150,7 +156,7 @@ export class RecordingController {
     this.settleOverlay();
     this.broadcastState();
 
-    log.info(`[rec] cancelled (${reason})`);
+    log.info(`[rec] #${this.generation} cancelled (${reason})`);
   }
 
   /** The dashboard Dictation Bar — and the universal stop for any recording. */
@@ -179,11 +185,11 @@ export class RecordingController {
     }
 
     if (!this.awaitingAudio.delete(generation)) {
-      log.warn('[rec] stale audio dropped (cancelled or superseded recording)');
+      log.warn(`[rec] #${generation} stale audio dropped (cancelled or superseded recording)`);
       return;
     }
 
-    this.enqueue(payload);
+    this.enqueue(payload, generation);
   }
 
   onAudioEmpty(generation: number): void {
@@ -196,7 +202,7 @@ export class RecordingController {
     } else if (!this.awaitingAudio.delete(generation)) {
       return;
     }
-    log.info('[rec] no audio captured');
+    log.info(`[rec] #${generation} no audio captured`);
     this.settleOverlay();
   }
 
@@ -238,7 +244,7 @@ export class RecordingController {
   // The pipeline
   // -------------------------------------------------------------------------
 
-  private enqueue(payload: AudioReadyPayload): void {
+  private enqueue(payload: AudioReadyPayload, generation: number): void {
     const settings = this.deps.getSettings();
     const durationMs = Math.max(0, payload.audioStoppedAt - payload.audioStartedAt);
 
@@ -248,15 +254,15 @@ export class RecordingController {
     // The upload starts now, alongside any earlier ones still running; only
     // the paste waits its turn. The no-op catch keeps a failure from counting
     // as unhandled before deliver() gets to it.
-    const upload = this.upload(payload, settings, durationMs);
+    const upload = this.upload(payload, settings, durationMs, generation);
     upload.catch(() => undefined);
 
     this.pasteQueue = this.pasteQueue.then(async () => {
       let result: Delivery;
       try {
-        result = await this.deliver(upload, settings, durationMs);
+        result = await this.deliver(upload, settings, durationMs, generation);
       } catch (error) {
-        log.error('[rec] processing failed', error);
+        log.error(`[rec] #${generation} processing failed`, error);
         result = {
           kind: 'error',
           message: error instanceof Error ? error.message : 'Something went wrong.',
@@ -272,6 +278,7 @@ export class RecordingController {
     payload: AudioReadyPayload,
     settings: Settings,
     durationMs: number,
+    generation: number,
   ): Promise<DictateResponse | null> {
     const samples = new Float32Array(payload.samples);
     if (samples.length === 0) return null;
@@ -279,7 +286,7 @@ export class RecordingController {
     const wav = encodeWav(samples, payload.sampleRate);
 
     log.info(
-      `[rec] audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples, ` +
+      `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples, ` +
         `${(wav.byteLength / 1024).toFixed(0)} kB wav, mic open ${durationMs}ms`,
     );
 
@@ -299,22 +306,27 @@ export class RecordingController {
       'dictation.wav',
     );
 
-    return this.deps.api.request<DictateResponse>('/dictate', {
+    const startedAt = Date.now();
+    const response = await this.deps.api.request<DictateResponse>('/dictate', {
       method: 'POST',
       formData: form,
+      timeoutMs: DICTATE_TIMEOUT_MS,
     });
+    log.info(`[rec] #${generation} server answered in ${Date.now() - startedAt}ms`);
+    return response;
   }
 
   private async deliver(
     upload: Promise<DictateResponse | null>,
     settings: Settings,
     durationMs: number,
+    generation: number,
   ): Promise<Delivery> {
     const response = await upload;
     if (response === null) return { kind: 'quiet' };
 
     if (isDiscarded(response)) {
-      log.info(`[rec] discarded by server (${response.reason})`);
+      log.info(`[rec] #${generation} discarded by server (${response.reason})`);
       return { kind: 'quiet' };
     }
 
@@ -322,6 +334,8 @@ export class RecordingController {
     // synthetic Ctrl+V sent while Win is still held arrives as Win+Ctrl+V, a
     // system shortcut. A recording that starts during the wait means waiting
     // again.
+    const waitStartedAt = Date.now();
+    if (this.listening) log.info(`[rec] #${generation} ready, waiting for the live recording to end`);
     let keysUp: boolean;
     do {
       await this.whenNotListening();
@@ -329,6 +343,10 @@ export class RecordingController {
     } while (this.listening);
 
     const outcome = await pasteText(response.cleaned, { press: keysUp });
+    log.info(
+      `[rec] #${generation} ${outcome.pasted ? `pasted via ${outcome.method}` : `not pasted (${outcome.error ?? 'unknown'})`}` +
+        ` after waiting ${Date.now() - waitStartedAt}ms`,
+    );
 
     // Keep the dashboard's Today list and stats live without a refetch cycle.
     if (response.sessionId !== undefined) {
