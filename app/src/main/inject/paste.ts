@@ -76,22 +76,32 @@ export interface PasteOutcome {
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The primary paste. uiohook posts keys by fixed key code (VK 0x56 on Windows,
+ * kVK_ANSI_V on macOS), so it works in any keyboard layout. nut-js resolves
+ * "v" through VkKeyScan with the layout of OUR thread: with a Russian layout
+ * active there, it finds no key, presses nothing and still reports success —
+ * which is how dictations reached History and never the document, until
+ * opening Whisper's own window happened to switch its thread's layout.
+ *
+ * Human order with a real hold (see PASTE_HOLD_MS): modifier down, V down,
+ * V up, modifier up.
+ */
+async function pressPasteViaUiohook(): Promise<void> {
+  const modifier = process.platform === 'darwin' ? UiohookKey.Meta : UiohookKey.Ctrl;
+  uIOhook.keyToggle(modifier, 'down');
+  uIOhook.keyToggle(UiohookKey.V, 'down');
+  await delay(PASTE_HOLD_MS);
+  uIOhook.keyToggle(UiohookKey.V, 'up');
+  uIOhook.keyToggle(modifier, 'up');
+}
+
+/** Fallback only: layout-dependent on Windows, see pressPasteViaUiohook. */
 async function pressPasteViaNutJs(): Promise<void> {
-  // Modifiers come first: only the LAST argument is treated as the real key,
-  // everything before it becomes a native modifier flag. The hold between
-  // press and release is deliberate — see PASTE_HOLD_MS.
+  // nut-js takes modifiers first and the real key last.
   await keyboard.pressKey(PASTE_MODIFIER, Key.V);
   await delay(PASTE_HOLD_MS);
   await keyboard.releaseKey(PASTE_MODIFIER, Key.V);
-}
-
-/**
- * uiohook can post synthetic keys too. It is the fallback rather than the
- * primary because it is fire-and-forget with no error signal at all.
- */
-function pressPasteViaUiohook(): void {
-  const modifier = process.platform === 'darwin' ? UiohookKey.Meta : UiohookKey.Ctrl;
-  uIOhook.keyTap(UiohookKey.V, [modifier]);
 }
 
 function scheduleRestore(entry: PendingRestore): void {
@@ -156,18 +166,18 @@ export async function pasteText(text: string): Promise<PasteOutcome> {
   let error: string | undefined;
 
   try {
-    await pressPasteViaNutJs();
-    method = 'nut-js';
-  } catch (nutError) {
-    error = nutError instanceof Error ? nutError.message : String(nutError);
-    log.warn(`[paste] nut-js failed: ${error} — trying uiohook`);
+    await pressPasteViaUiohook();
+    method = 'uiohook';
+  } catch (hookError) {
+    error = hookError instanceof Error ? hookError.message : String(hookError);
+    log.warn(`[paste] uiohook failed: ${error} — trying nut-js`);
     try {
-      pressPasteViaUiohook();
-      method = 'uiohook';
+      await pressPasteViaNutJs();
+      method = 'nut-js';
       error = undefined;
-    } catch (hookError) {
-      error = hookError instanceof Error ? hookError.message : String(hookError);
-      log.warn(`[paste] uiohook fallback failed: ${error}`);
+    } catch (nutError) {
+      error = nutError instanceof Error ? nutError.message : String(nutError);
+      log.warn(`[paste] nut-js fallback failed: ${error}`);
     }
   }
 
