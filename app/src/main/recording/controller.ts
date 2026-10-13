@@ -21,6 +21,7 @@ import {
 import type { ApiClient } from '../api/client.js';
 import { trimSilence } from '../audio/trim.js';
 import { encodeWav, samplesToMs } from '../audio/wav.js';
+import { getFocusedAppName } from '../inject/focused-app.js';
 import { pasteText } from '../inject/paste.js';
 import { log } from '../log.js';
 import { getMicDeviceId } from '../store.js';
@@ -379,6 +380,11 @@ export class RecordingController {
     } while (this.listening);
 
     const text = this.joinWithPrevious(response.cleaned);
+    // Diagnostics only, never awaited: which app had focus when the keystroke
+    // went out tells a paste that landed elsewhere from one that was never sent.
+    void getFocusedAppName().then((focused) => {
+      log.info(`[rec] #${generation} focus at paste: ${focused ?? 'unknown'}`);
+    });
     const outcome = await pasteText(text);
     if (outcome.pasted) {
       this.lastPaste = { text, inputActivity: this.deps.getInputActivity(), at: Date.now() };
