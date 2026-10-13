@@ -117,8 +117,15 @@ function scheduleRestore(entry: PendingRestore): void {
  * Back-to-back dictations reuse the FIRST snapshot: taking a new one would
  * capture our own previous transcript as "the user's clipboard" and restore
  * that instead of what they actually had.
+ *
+ * With `press: false` the text only goes on the clipboard — for when the user
+ * is still holding modifiers and a synthetic Ctrl+V would become another
+ * shortcut.
  */
-export async function pasteText(text: string): Promise<PasteOutcome> {
+export async function pasteText(
+  text: string,
+  { press = true }: { press?: boolean } = {},
+): Promise<PasteOutcome> {
   if (text.trim() === '') {
     return { pasted: false, method: 'none', focusedApp: null, error: 'empty text' };
   }
@@ -138,6 +145,13 @@ export async function pasteText(text: string): Promise<PasteOutcome> {
   }
 
   writeText(text);
+
+  if (!press) {
+    scheduleRestore(pending);
+    log.warn('[paste] modifier keys still held — text left on clipboard');
+    return { pasted: false, method: 'none', focusedApp: null, error: 'modifier keys held' };
+  }
+
   await delay(CLIPBOARD_SETTLE_MS);
 
   suppressHotkeyFor(SUPPRESS_MS);
