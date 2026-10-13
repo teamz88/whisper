@@ -19,6 +19,7 @@ import {
   type OverlayState,
 } from '../../shared/overlay.js';
 import type { ApiClient } from '../api/client.js';
+import { trimSilence } from '../audio/trim.js';
 import { encodeWav, samplesToMs } from '../audio/wav.js';
 import { pasteText } from '../inject/paste.js';
 import { log } from '../log.js';
@@ -284,14 +285,24 @@ export class RecordingController {
     durationMs: number,
     generation: number,
   ): Promise<DictateResponse | null> {
-    const samples = new Float32Array(payload.samples);
-    if (samples.length === 0) return null;
+    const captured = new Float32Array(payload.samples);
+    if (captured.length === 0) return null;
 
+    const trimmed = trimSilence(captured, payload.sampleRate);
+    if (trimmed.kind === 'no-speech') {
+      log.info(
+        `[rec] #${generation} no speech in ${samplesToMs(captured.length, payload.sampleRate)}ms of audio, not sent`,
+      );
+      return null;
+    }
+
+    const samples = trimmed.samples;
     const wav = encodeWav(samples, payload.sampleRate);
 
     log.info(
-      `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples, ` +
-        `${(wav.byteLength / 1024).toFixed(0)} kB wav, mic open ${durationMs}ms`,
+      `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples ` +
+        `(${trimmed.trimmedMs}ms of silence trimmed), ${(wav.byteLength / 1024).toFixed(0)} kB wav, ` +
+        `mic open ${durationMs}ms`,
     );
 
     // Field order is a protocol detail, not a style choice: the server reads
