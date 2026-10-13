@@ -156,6 +156,7 @@ from the releases page.
 | `npm run migrate`       | apply SQL migrations                            |
 | `npm run create-user`   | add a user (see above)                          |
 | `npm run smoke`         | end-to-end API smoke test                       |
+| `npm test`              | desktop app unit tests (hotkey, recording, audio) |
 
 ## Security model, in one paragraph
 
