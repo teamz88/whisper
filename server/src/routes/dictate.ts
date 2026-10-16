@@ -19,6 +19,12 @@ import { classifyTranscript } from '../services/ai/hallucination.js';
 import { buildVocabularyPrompt, pickTranscriptionModel } from '../services/ai/models.js';
 import { transcribe } from '../services/ai/transcribe.js';
 import { createSession } from '../services/sessions.js';
+
+/**
+ * A NO_SPEECH verdict from the cleanup model is honoured only for raw transcripts
+ * shorter than this many words; longer ones are real speech by construction.
+ */
+const NO_SPEECH_TRUST_MAX_WORDS = 5;
 import { getSettings } from '../services/settings.js';
 
 /**
@@ -175,10 +181,24 @@ export function registerDictateRoute(
         cleanupMs = Date.now() - cleanupStartedAt;
 
         if (result.kind === 'no-speech') {
-          request.log.info(
-            `[dictate] user=${userId} discarded (no-speech) whisper ${whisperMs}ms · cleanup ${cleanupMs}ms · total ${Date.now() - startedAt}ms`,
-          );
-          return { discarded: true, reason: 'no-speech' };
+          // The cleanup model's NO_SPEECH is a judgment call, and it has been wrong
+          // on real sentences (2026-10-16: four 10-17 s dictations of one sentence
+          // discarded in a row). A raw transcript with real words is never thrown
+          // away on the model's word: keep the raw text instead. Only a short raw
+          // (an artifact the hallucination pass did not know) is still discarded,
+          // and both branches log the raw so the next case is diagnosable.
+          const rawWords = countWords(cleaned);
+          const rawPreview = JSON.stringify(cleaned.slice(0, 80));
+          if (rawWords >= NO_SPEECH_TRUST_MAX_WORDS) {
+            request.log.warn(
+              `[dictate] user=${userId} cleanup said NO_SPEECH for a ${rawWords}-word transcript; using raw transcript ${rawPreview}`,
+            );
+          } else {
+            request.log.info(
+              `[dictate] user=${userId} discarded (no-speech) raw=${rawWords}w ${rawPreview} whisper ${whisperMs}ms · cleanup ${cleanupMs}ms · total ${Date.now() - startedAt}ms`,
+            );
+            return { discarded: true, reason: 'no-speech' };
+          }
         }
 
         // 'fallback' deliberately keeps the raw transcript rather than failing.
