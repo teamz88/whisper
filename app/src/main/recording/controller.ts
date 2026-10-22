@@ -232,7 +232,14 @@ export class RecordingController {
     }
 
     if (isDiscarded(response)) {
-      log.info(`[rec] discarded by server (${response.reason})`);
+      log.info(`[rec] discarded by server (${response.reason})${response.message === undefined ? '' : `: ${response.message}`}`);
+      // A short phantom goes away quietly; a long recording the server heard
+      // nothing in is shown, so a dead mic is noticed now and not after the
+      // next three dictations (2026-10-22: 85 s pasted as "Thank you.").
+      if (response.message !== undefined) {
+        this.failIfCurrent(generation, response.message);
+        return;
+      }
       this.finishQuietly();
       return;
     }

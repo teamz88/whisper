@@ -28,6 +28,8 @@ export interface Env {
   accurateModel: string;
   cleanupModel: string;
   maxAudioBytes: number;
+  /** Where a discarded long recording's audio is kept for 24 h so it can be re-transcribed by hand. */
+  retainDir: string;
   logLevel: string;
 }
 
@@ -156,6 +158,7 @@ export function loadEnv(): Env {
     accurateModel: readString('TRANSCRIBE_ACCURATE_MODEL', defaults.accurateModel)!,
     cleanupModel: readString('CLEANUP_MODEL', defaults.cleanupModel)!,
     maxAudioBytes,
+    retainDir: readString('RETAIN_DIR', 'retained')!,
     logLevel: readString('LOG_LEVEL', nodeEnv === 'production' ? 'info' : 'debug')!,
   };
 }

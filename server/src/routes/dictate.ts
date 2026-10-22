@@ -1,3 +1,6 @@
+import { mkdir, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+
 import type { FastifyInstance } from 'fastify';
 import type { MultipartFile, MultipartValue } from '@fastify/multipart';
 
@@ -25,6 +28,46 @@ import { createSession } from '../services/sessions.js';
  * shorter than this many words; longer ones are real speech by construction.
  */
 const NO_SPEECH_TRUST_MAX_WORDS = 5;
+/**
+ * A recording this long that yields this few raw words is room tone, a dead
+ * input device or a muted mic, not speech (2026-10-22: 85 s of audio came back
+ * as "you Thank you. Thank you." and "Thank you." was pasted). It is discarded
+ * with a reason the client can show, and the audio is kept for a day so the
+ * dictation can be re-transcribed by hand instead of being lost.
+ */
+const SILENT_LONG_MIN_MS = 20_000;
+const SILENT_LONG_MAX_WORDS = 3;
+const RETAIN_FOR_MS = 24 * 60 * 60 * 1000;
+
+async function retainAudio(
+  dir: string,
+  audio: Buffer,
+  mimetype: string,
+  userId: string,
+  reason: string,
+  log: { warn: (msg: string) => void },
+): Promise<string | null> {
+  try {
+    const root = resolve(dir);
+    await mkdir(root, { recursive: true });
+    const now = Date.now();
+    for (const name of await readdir(root)) {
+      const p = join(root, name);
+      try {
+        if (now - (await stat(p)).mtimeMs > RETAIN_FOR_MS) await unlink(p);
+      } catch {
+        /* a file pruned by another request */
+      }
+    }
+    const ext = /wav/iu.test(mimetype) ? 'wav' : /webm/iu.test(mimetype) ? 'webm' : /ogg/iu.test(mimetype) ? 'ogg' : /mp4|m4a/iu.test(mimetype) ? 'm4a' : 'bin';
+    const name = `${new Date(now).toISOString().replace(/[:.]/gu, '-')}-${userId.slice(0, 8)}-${reason}.${ext}`;
+    await writeFile(join(root, name), audio);
+    return join(root, name);
+  } catch (error) {
+    log.warn(`[dictate] could not retain discarded audio: ${(error as Error).message}`);
+    return null;
+  }
+}
 import { getSettings } from '../services/settings.js';
 
 /**
@@ -155,11 +198,27 @@ export function registerDictateRoute(
       const whisperMs = Date.now() - whisperStartedAt;
 
       const verdict = classifyTranscript(raw);
-      if (verdict.hallucination) {
+      const rawWordCount = countWords(raw);
+      const silentLong = durationMs >= SILENT_LONG_MIN_MS && rawWordCount <= SILENT_LONG_MAX_WORDS;
+      if (verdict.hallucination || silentLong) {
+        const reason = verdict.hallucination ? verdict.reason : 'silent-long';
+        const seconds = Math.round(durationMs / 1000);
+        const retained =
+          durationMs >= SILENT_LONG_MIN_MS
+            ? await retainAudio(env.retainDir, audio, file.mimetype, userId, reason, request.log)
+            : null;
         request.log.info(
-          `[dictate] user=${userId} discarded (${verdict.reason}) whisper ${whisperMs}ms · total ${Date.now() - startedAt}ms`,
+          `[dictate] user=${userId} discarded (${reason}) ${seconds}s raw=${rawWordCount}w ${JSON.stringify(raw.slice(0, 80))} whisper ${whisperMs}ms · total ${Date.now() - startedAt}ms${retained === null ? '' : ` · audio retained ${retained}`}`,
         );
-        return { discarded: true, reason: verdict.reason };
+        return {
+          discarded: true,
+          reason,
+          ...(durationMs >= SILENT_LONG_MIN_MS
+            ? {
+                message: `Nothing heard in ${seconds} s of audio (${rawWordCount} words). Check the microphone input; the audio is kept on the server for 24 h.`,
+              }
+            : {}),
+        };
       }
 
       let cleaned = raw.trim();

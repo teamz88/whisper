@@ -36,10 +36,16 @@ export interface DictateSuccess {
   sessionId?: string;
 }
 
-/** Silence, a Whisper hallucination, or a NO_SPEECH verdict from cleanup. */
+/**
+ * Silence, a Whisper hallucination, a NO_SPEECH verdict from cleanup, or a long
+ * recording that produced almost no words (`silent-long`: a dead or muted input,
+ * 2026-10-22). `message`, when present, is meant for the person: the recording
+ * was long enough that silence must not pass unnoticed.
+ */
 export interface DictateDiscarded {
   discarded: true;
-  reason: 'empty' | 'hallucination' | 'no-speech';
+  reason: 'empty' | 'hallucination' | 'no-speech' | 'silent-long';
+  message?: string;
 }
 
 export type DictateResponse = DictateSuccess | DictateDiscarded;

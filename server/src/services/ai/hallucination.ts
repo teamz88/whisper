@@ -95,6 +95,10 @@ const RAW_PATTERNS: readonly RegExp[] = [
 const NORMALISED_PATTERNS: readonly RegExp[] = [
   // Repeated single token: "you you you you", "спасибо спасибо спасибо"
   /^(\S+)(\s+\1){2,}$/u,
+  // Nothing but boilerplate tokens in any order or count: "you thank you thank you"
+  // (85 s of room tone, 2026-10-22), "thanks bye", "you you thank you". The exact
+  // set above misses these because the tokens repeat unevenly.
+  /^(?:(?:you|thank|thanks|thankyou|bye|goodbye|please|subscribe|watching)\s*)+$/u,
 ];
 
 /** Punctuation-only strings such as "...", "?!", "—". */
