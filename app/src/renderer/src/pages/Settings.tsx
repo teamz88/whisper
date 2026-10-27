@@ -107,15 +107,23 @@ export function Settings(): ReactNode {
     };
   }, []);
 
-  const selectedDeviceId =
-    deviceId !== '' && devices.some((device) => device.deviceId === deviceId)
-      ? deviceId
-      : devices[0]?.deviceId ?? '';
+  // Windows lists the same microphone three times: a "default" and a
+  // "communications" alias, then the real device. The aliases are hidden; the
+  // OS default is offered once, as the empty value (no deviceId = system default).
+  const realDevices = devices.filter(
+    (device) => device.deviceId !== 'default' && device.deviceId !== 'communications',
+  );
 
-  const deviceOptions = devices.map((device, index) => ({
-    value: device.deviceId,
-    label: device.label !== '' ? device.label : `Microphone ${index + 1}`,
-  }));
+  const selectedDeviceId =
+    deviceId !== '' && realDevices.some((device) => device.deviceId === deviceId) ? deviceId : '';
+
+  const deviceOptions = [
+    { value: '', label: 'System default' },
+    ...realDevices.map((device, index) => ({
+      value: device.deviceId,
+      label: device.label !== '' ? device.label : `Microphone ${index + 1}`,
+    })),
+  ];
 
   // --- Delete all history. ----------------------------------------------------
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -319,17 +327,14 @@ export function Settings(): ReactNode {
           <SettingRow
             label="Microphone"
             hint="Which input Whisper listens to on this computer."
+            // Stacked: device names can be paragraph-length ("Microphone Array
+            // (Intel® Smart Sound Technology for Digital Microphones)") and
+            // beside the label they were cut off in the closed select.
+            stacked
             control={
               <Select
-                // Capped width: device names can be paragraph-length
-                // ("Набор микрофонов (Технология Intel® Smart Sound…)") and an
-                // unconstrained select crushes the row's label column.
-                className="w-64 max-w-full"
-                options={
-                  deviceOptions.length > 0
-                    ? deviceOptions
-                    : [{ value: '', label: 'Default microphone' }]
-                }
+                className="w-full"
+                options={deviceOptions}
                 value={selectedDeviceId}
                 onChange={pickDevice}
               />
