@@ -66,6 +66,19 @@ export class ApiClient {
     return auth.user;
   }
 
+  /**
+   * The server revokes every refresh token of the account and answers with a
+   * new pair for THIS device. It must be stored right away: the refresh token
+   * on disk is already dead.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const auth = await this.request<AuthResponse>('/me/password', {
+      method: 'POST',
+      body: { currentPassword, newPassword },
+    });
+    setStoredAuth({ accessToken: auth.accessToken, refreshToken: auth.refreshToken });
+  }
+
   async logout(): Promise<void> {
     const stored = getStoredAuth();
     if (stored !== null) {

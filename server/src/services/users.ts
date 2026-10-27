@@ -1,6 +1,7 @@
 import {
   DEFAULT_SETTINGS,
   MIN_PASSWORD_LENGTH,
+  type AuthResponse,
   type Profile,
   type Role,
   type UpdateProfileRequest,
@@ -15,8 +16,10 @@ import {
   type Pool,
   type PoolClient,
 } from '../db.js';
-import { badRequest, conflict, notFound } from '../errors.js';
-import { hashPassword } from '../auth/password.js';
+import type { Env } from '../env.js';
+import { badRequest, conflict, notFound, wrongCurrentPassword } from '../errors.js';
+import { hashPassword, verifyPassword } from '../auth/password.js';
+import { issueTokens } from '../auth/tokens.js';
 
 export interface UserRow {
   id: string;
@@ -167,6 +170,46 @@ export async function updateProfile(
 
   if (row === null) throw notFound('User not found.');
   return toProfile(row);
+}
+
+/**
+ * Self-service password change. The old password must verify, every refresh
+ * token of the user is deleted (other devices are signed out once their access
+ * token expires), and a fresh pair is issued for the device that asked — all in
+ * one transaction, so a failure cannot leave the user with no valid session.
+ */
+export async function changePassword(
+  pool: Pool,
+  env: Env,
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<AuthResponse> {
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  if (newPassword === currentPassword) {
+    throw badRequest('Choose a password different from your current one.');
+  }
+
+  const user = await findById(pool, userId);
+  if (user === null) throw notFound('User not found.');
+  if (!(await verifyPassword(user.password_hash, currentPassword))) throw wrongCurrentPassword();
+
+  const passwordHash = await hashPassword(newPassword);
+
+  return withTransaction(pool, async (client) => {
+    await query(client, 'UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+    await query(client, 'DELETE FROM refresh_tokens WHERE user_id = $1', [userId]);
+
+    const tokens = await issueTokens(client, env, {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    return { ...tokens, user: toProfile(user) };
+  });
 }
 
 export async function setActive(db: Pool, id: string, isActive: boolean): Promise<Profile> {

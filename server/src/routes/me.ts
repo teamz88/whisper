@@ -1,20 +1,23 @@
 import type { FastifyInstance } from 'fastify';
 
-import type {
-  CreateSessionRequest,
-  DeleteAllSessionsResponse,
-  Profile,
-  Session,
-  SessionPage,
-  Settings,
-  UpdateProfileRequest,
-  UpdateSettingsRequest,
-  UserStats,
+import {
+  MIN_PASSWORD_LENGTH,
+  type ChangePasswordRequest,
+  type ChangePasswordResponse,
+  type CreateSessionRequest,
+  type DeleteAllSessionsResponse,
+  type Profile,
+  type Session,
+  type SessionPage,
+  type Settings,
+  type UpdateProfileRequest,
+  type UpdateSettingsRequest,
+  type UserStats,
 } from '@whisper/shared';
 
 import type { AppDeps } from '../app.js';
 import type { AuthGuards } from '../auth/middleware.js';
-import { getProfile, updateProfile } from '../services/users.js';
+import { changePassword, getProfile, updateProfile } from '../services/users.js';
 import { getSettings, updateSettings } from '../services/settings.js';
 import {
   createSession,
@@ -33,7 +36,7 @@ import { getUserStats } from '../services/stats.js';
  */
 export function registerMeRoutes(
   app: FastifyInstance,
-  { pool }: AppDeps,
+  { pool, env }: AppDeps,
   guards: AuthGuards,
 ): void {
   const auth = { onRequest: guards.requireAuth };
@@ -59,6 +62,32 @@ export function registerMeRoutes(
       },
     },
     async (request): Promise<Profile> => updateProfile(pool, request.userId, request.body),
+  );
+
+  app.post<{ Body: ChangePasswordRequest }>(
+    '/me/password',
+    {
+      ...auth,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['currentPassword', 'newPassword'],
+          additionalProperties: false,
+          properties: {
+            currentPassword: { type: 'string', minLength: 1, maxLength: 512 },
+            newPassword: { type: 'string', minLength: MIN_PASSWORD_LENGTH, maxLength: 512 },
+          },
+        },
+      },
+      // Same reasoning as /auth/login: this verifies a password.
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request): Promise<ChangePasswordResponse> => {
+      const { currentPassword, newPassword } = request.body;
+      const result = await changePassword(pool, env, request.userId, currentPassword, newPassword);
+      request.log.info(`[auth] user=${request.userId} changed their password`);
+      return result;
+    },
   );
 
   app.get('/me/settings', auth, async (request): Promise<Settings> => {

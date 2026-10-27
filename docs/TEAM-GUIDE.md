@@ -25,6 +25,10 @@ Slack, Notion, Telegram, your IDE, anywhere you can type.
 There is no sign-up. Your admin creates your account and gives you an email +
 temporary password. Left-click the tray icon → sign in.
 
+You can change your own password any time in Settings → Account → Change
+password (needs your current one; your other devices get signed out). If you
+forgot it, ask an admin for a new temporary password.
+
 First sign-in walks you through a 30-second setup: microphone check, the
 shortcut, and how you want your text to sound.
 

@@ -22,6 +22,10 @@ export const badRequest = (message: string): HttpError => new HttpError(400, 'ba
 export const invalidCredentials = (): HttpError =>
   new HttpError(401, 'invalid_credentials', 'That email and password combination is not correct.');
 
+/** 400, not 401: the caller IS signed in, and a 401 reads as "session dead". */
+export const wrongCurrentPassword = (): HttpError =>
+  new HttpError(400, 'invalid_credentials', 'Your current password is not correct.');
+
 export const accountDisabled = (): HttpError =>
   new HttpError(403, 'account_disabled', 'This account has been deactivated. Contact your admin.');
 
