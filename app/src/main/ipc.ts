@@ -19,6 +19,8 @@ import type {
   AppInfo,
   AppPlatform,
   AudioReadyPayload,
+  ChangePasswordPayload,
+  ChangePasswordResult,
   IpcInvokeChannel,
   IpcInvokeMap,
   LoginPayload,
@@ -153,6 +155,18 @@ export function registerIpc(context: AppContext): void {
 
   handle('auth:logout', async () => {
     await context.api.logout();
+  });
+
+  handle('auth:change-password', async (payload: ChangePasswordPayload): Promise<ChangePasswordResult> => {
+    try {
+      await context.api.changePassword(payload.currentPassword, payload.newPassword);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not change the password.',
+      };
+    }
   });
 
   // -------------------------------------------------------------------------

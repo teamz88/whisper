@@ -48,6 +48,17 @@ export interface LoginResult {
   error?: string;
 }
 
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResult {
+  ok: boolean;
+  /** User-facing text, already mapped from the API error. */
+  error?: string;
+}
+
 export interface ListSessionsPayload {
   page: number;
   search?: string;
@@ -114,6 +125,7 @@ export interface IpcInvokeMap {
   'auth:status': { req: void; res: AuthStatus };
   'auth:login': { req: LoginPayload; res: LoginResult };
   'auth:logout': { req: void; res: void };
+  'auth:change-password': { req: ChangePasswordPayload; res: ChangePasswordResult };
 
   'profile:get': { req: void; res: Profile };
   'profile:update': { req: UpdateProfileRequest; res: Profile };
@@ -233,6 +245,7 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'auth:status',
   'auth:login',
   'auth:logout',
+  'auth:change-password',
   'profile:get',
   'profile:update',
   'settings:get',

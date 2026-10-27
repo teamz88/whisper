@@ -26,6 +26,17 @@ export interface RefreshRequest {
   refreshToken: string;
 }
 
+/**
+ * POST /me/password. Every other session of the user is revoked; the response
+ * carries a fresh token pair so the device that made the change stays signed in.
+ */
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export type ChangePasswordResponse = AuthResponse;
+
 export interface LogoutRequest {
   refreshToken: string;
 }

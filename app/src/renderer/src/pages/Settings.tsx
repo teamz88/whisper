@@ -14,6 +14,7 @@ import {
   isOverlayPosition,
 } from '@whisper/shared';
 
+import { ChangePasswordModal } from '../components/ChangePasswordModal.js';
 import { HotkeyCapture } from '../components/HotkeyCapture.js';
 import { LevelMeter, useMicLevel } from '../components/LevelMeter.js';
 import { TeamSection } from '../components/TeamSection.js';
@@ -150,6 +151,9 @@ export function Settings(): ReactNode {
   useEffect(() => {
     setNameDraft(profile?.fullName ?? '');
   }, [profile?.fullName]);
+
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   const updateControl = (): ReactNode => {
     switch (updateStatus.kind) {
@@ -451,6 +455,28 @@ export function Settings(): ReactNode {
             label="Email"
             control={<span className="text-sm text-ink-faint">{profile?.email ?? '—'}</span>}
           />
+          <SettingRow
+            label="Password"
+            hint={
+              passwordChanged ? (
+                <span className="text-success">Password changed.</span>
+              ) : (
+                'Other devices are signed out when you change it.'
+              )
+            }
+            control={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setPasswordChanged(false);
+                  setPasswordOpen(true);
+                }}
+              >
+                Change password
+              </Button>
+            }
+          />
         </Card>
       </SettingsGroup>
 
@@ -459,6 +485,12 @@ export function Settings(): ReactNode {
           <TeamSection />
         </SettingsGroup>
       ) : null}
+
+      <ChangePasswordModal
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        onDone={() => setPasswordChanged(true)}
+      />
 
       <Modal
         open={confirmOpen}
