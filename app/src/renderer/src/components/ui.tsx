@@ -116,16 +116,20 @@ export function SettingRow({
   hint,
   control,
   className,
+  stacked = false,
 }: {
   label: string;
   hint?: ReactNode;
   control: ReactNode;
   className?: string;
+  /** Control goes under the label at full width, for long values (device names). */
+  stacked?: boolean;
 }): ReactNode {
   return (
     <div
       className={cn(
-        'flex items-start justify-between gap-6 border-b border-line-soft px-5 py-4 last:border-b-0',
+        'border-b border-line-soft px-5 py-4 last:border-b-0',
+        stacked ? 'flex flex-col gap-3' : 'flex items-start justify-between gap-6',
         className,
       )}
     >
@@ -135,7 +139,7 @@ export function SettingRow({
           <div className="mt-0.5 text-[13px] leading-snug text-ink-faint">{hint}</div>
         )}
       </div>
-      <div className="shrink-0">{control}</div>
+      <div className={stacked ? 'min-w-0' : 'shrink-0'}>{control}</div>
     </div>
   );
 }
@@ -169,7 +173,9 @@ export function Toggle({ checked, onChange, disabled = false, label }: TogglePro
     >
       <span
         className={cn(
-          'absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform',
+          // left-0 matters: without it the knob starts at the button's centred
+          // static position and the checked translate pushes it out of the track.
+          'absolute left-0 top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform',
           checked ? 'translate-x-[22px]' : 'translate-x-0.5',
         )}
       />
