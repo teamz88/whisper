@@ -30,7 +30,12 @@ mock.module(new URL('../src/main/store.ts', import.meta.url).href, {
 });
 mock.module('electron', { namedExports: { app: { isReady: () => false } } });
 
-const { RecordingController } = await import('../src/main/recording/controller.ts');
+const { RecordingController, dictateTimeoutMs } = await import(
+  '../src/main/recording/controller.ts'
+);
+
+/** The timeout each upload was sent with, keyed by its fake mic-open duration. */
+const timeouts = new Map<string, number | undefined>();
 
 const tick = (ms = 0): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,9 +55,11 @@ function setup() {
   const ctrl = new RecordingController({
     overlay: { setState: (s: { kind: string }) => overlay.push(s.kind), hideAfter: () => undefined } as never,
     api: {
-      request: (_path: string, options: { formData: FormData }) =>
+      request: (_path: string, options: { formData: FormData; timeoutMs?: number }) =>
         new Promise((resolve, reject) => {
-          pending.set(String(options.formData.get('durationMs')), { resolve, reject });
+          const key = String(options.formData.get('durationMs'));
+          timeouts.set(key, options.timeoutMs);
+          pending.set(key, { resolve, reject });
         }),
     } as never,
     getSettings: () => ({ language: 'en', defaultStyle: 'default', aiCleanup: true }) as never,
@@ -252,4 +259,20 @@ test('no joining space before punctuation', async () => {
 
 test('no joining space between CJK sentences', async () => {
   assert.equal((await backToBack('你好。', '世界。'))[1], '世界。');
+});
+
+test('the upload timeout grows with the recording and is capped', () => {
+  assert.equal(dictateTimeoutMs(5_000), 95_000);
+  assert.equal(dictateTimeoutMs(200_000), 290_000);
+  assert.equal(dictateTimeoutMs(10 * 60_000), 290_000);
+  assert.equal(dictateTimeoutMs(-1), 90_000);
+});
+
+test('a 3-minute dictation is uploaded with more than the 90 s base timeout', async () => {
+  const t = setup();
+  t.dictate(1, 200_000);
+  assert.equal(timeouts.get('200000'), 290_000);
+  t.reply(200_000, 'long one');
+  await tick(10);
+  assert.deepEqual(texts(), ['long one']);
 });
