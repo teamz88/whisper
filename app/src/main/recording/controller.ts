@@ -41,9 +41,23 @@ const KEY_RELEASE_GRACE_MS = 600;
 
 /**
  * Pastes wait for every earlier dictation, so one hung upload would hold back
- * all the ones after it. A 10-minute recording transcribes well within this.
+ * all the ones after it, so the limit starts at 90 s and grows with the length
+ * of the recording (see dictateTimeoutMs below).
  */
-const DICTATE_TIMEOUT_MS = 90_000;
+const DICTATE_BASE_TIMEOUT_MS = 90_000;
+
+/**
+ * The upload and the server's transcription both grow with the recording, and
+ * the server keeps working (and saves the History row) after the client gives
+ * up. A fixed limit therefore produced "transcript in History, nothing pasted"
+ * for long dictations. The cap is Node's fetch (undici) headersTimeout of 300 s:
+ * a longer limit here would never be reached, the request dies at 5 minutes.
+ */
+const DICTATE_MAX_TIMEOUT_MS = 290_000;
+
+export function dictateTimeoutMs(recordingMs: number): number {
+  return Math.min(DICTATE_MAX_TIMEOUT_MS, DICTATE_BASE_TIMEOUT_MS + Math.max(0, recordingMs));
+}
 
 /**
  * A dictation pasted straight after the previous one gets a joining space
@@ -344,7 +358,7 @@ export class RecordingController {
     const response = await this.deps.api.request<DictateResponse>('/dictate', {
       method: 'POST',
       formData: form,
-      timeoutMs: DICTATE_TIMEOUT_MS,
+      timeoutMs: dictateTimeoutMs(durationMs),
     });
     log.info(`[rec] #${generation} server answered in ${Date.now() - startedAt}ms`);
     return response;
