@@ -1,0 +1,69 @@
+# Whisper — self-hosted stack: API + Postgres + Caddy (automatic HTTPS).
+#
+# Run from THIS folder (selfhost/), after creating selfhost/.env:
+#
+#   docker compose up -d --build
+#
+# Only ports 80 and 443 are opened to the internet. Postgres is reachable from
+# the API container alone — it is deliberately NOT published on the host.
+# Step-by-step guide: docs/SELF-HOSTING.md
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whisper
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in selfhost/.env}
+      POSTGRES_DB: whisper
+    volumes:
+      - whisper-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U whisper -d whisper']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '8080'
+      DATABASE_URL: postgres://whisper:${POSTGRES_PASSWORD}@db:5432/whisper
+      DATABASE_SSL: 'false'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in selfhost/.env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in selfhost/.env}
+      TRANSCRIPTION_PROVIDER: ${TRANSCRIPTION_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # The desktop app sends no Origin header; there is no browser client.
+      CORS_ORIGIN: '*'
+    # Applying the migrations on every start is safe (they are idempotent and
+    # recorded), and it means an update never needs a separate manual step.
+    command: ['sh', '-c', 'node server/dist/cli/migrate.js && node server/dist/index.js']
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in selfhost/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  whisper-pgdata:
+  caddy-data:
+  caddy-config:

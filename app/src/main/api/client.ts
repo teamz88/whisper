@@ -16,7 +16,8 @@ import { clearAuth, getStoredAuth, setStoredAuth } from '../store.js';
 export type SignOutReason = 'user' | 'expired' | 'disabled';
 
 export interface ApiClientOptions {
-  baseUrl: string;
+  /** Read on every request: the server can be changed on the sign-in screen. */
+  getBaseUrl: () => string;
   /** Fired when the session dies for a reason the UI must react to. */
   onSignedOut: (reason: SignOutReason) => void;
 }
@@ -32,7 +33,7 @@ interface RequestOptions {
 }
 
 export class ApiClient {
-  private readonly baseUrl: string;
+  private readonly getBaseUrl: () => string;
   private readonly onSignedOut: (reason: SignOutReason) => void;
 
   /**
@@ -43,7 +44,7 @@ export class ApiClient {
   private refreshing: Promise<boolean> | null = null;
 
   constructor(options: ApiClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.getBaseUrl = options.getBaseUrl;
     this.onSignedOut = options.onSignedOut;
   }
 
@@ -198,7 +199,7 @@ export class ApiClient {
     options: RequestOptions,
     accessToken?: string,
   ): Promise<Response> {
-    const url = new URL(this.baseUrl + path);
+    const url = new URL(this.getBaseUrl().replace(/\/+$/, '') + path);
     if (options.query !== undefined) {
       for (const [key, value] of Object.entries(options.query)) {
         if (value !== undefined) url.searchParams.set(key, String(value));

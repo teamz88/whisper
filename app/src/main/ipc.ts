@@ -22,6 +22,8 @@ import type {
   ChangePasswordPayload,
   ChangePasswordResult,
   IpcInvokeChannel,
+  ServerInfo,
+  SetServerResult,
   IpcInvokeMap,
   LoginPayload,
   LoginResult,
@@ -29,13 +31,16 @@ import type {
 import type { ApiClient } from './api/client.js';
 import type { HotkeyListener } from './hotkey/listener.js';
 import { log } from './log.js';
+import { normalizeServerUrl } from './server-url.js';
 import type { RecordingController } from './recording/controller.js';
 import {
   getMicDeviceId,
   getOnboarded,
+  getServerUrl,
   getStoredSettings,
   setMicDeviceId,
   setOnboarded,
+  setServerUrl,
   setStoredSettings,
 } from './store.js';
 import type { Updates } from './updates.js';
@@ -51,7 +56,10 @@ export interface AppContext {
   tray: AppTray;
   listener: HotkeyListener;
   updates: Updates;
-  apiUrl: string;
+  /** The server in use right now (a custom one, or the built-in default). */
+  getApiUrl: () => string;
+  /** The server built into this installer. */
+  defaultApiUrl: string;
   apiUrlMissing: boolean;
   broadcast: <T>(channel: string, payload: T) => void;
   getProfile: () => Profile | null;
@@ -116,7 +124,7 @@ export function registerIpc(context: AppContext): void {
     return {
       version: app.getVersion(),
       platform: process.platform as AppPlatform,
-      apiUrl: context.apiUrl,
+      apiUrl: context.getApiUrl(),
       apiUrlMissing: context.apiUrlMissing,
     };
   });
@@ -167,6 +175,55 @@ export function registerIpc(context: AppContext): void {
         error: error instanceof Error ? error.message : 'Could not change the password.',
       };
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Server address (self-hosting)
+  // -------------------------------------------------------------------------
+
+  const serverInfo = (): ServerInfo => ({
+    url: context.getApiUrl(),
+    defaultUrl: context.defaultApiUrl,
+    custom: getServerUrl() !== null,
+  });
+
+  handle('server:get', () => serverInfo());
+
+  handle('server:set', async ({ url }): Promise<SetServerResult> => {
+    // Tokens belong to one server. Changing it under a signed-in session would
+    // send them to a server that never issued them.
+    if (context.getProfile() !== null || context.api.hasSession) {
+      return { ok: false, error: 'Sign out first, then change the server.' };
+    }
+
+    if (url === null) {
+      setServerUrl(null);
+      log.info('[server] back to the built-in server');
+      return { ok: true, server: serverInfo() };
+    }
+
+    const normalized = normalizeServerUrl(url);
+    if (!normalized.ok) return { ok: false, error: normalized.error };
+
+    // Prove there is a Whisper server there before remembering it, so a typo
+    // fails here instead of as a confusing sign-in error.
+    try {
+      const response = await fetch(`${normalized.url}/health`, {
+        signal: AbortSignal.timeout(8_000),
+      });
+      const body = (await response.json()) as { status?: unknown };
+      if (!response.ok || body.status !== 'ok') throw new Error('not a Whisper server');
+    } catch (error) {
+      log.warn(`[server] ${normalized.url} did not answer as a Whisper server: ${String(error)}`);
+      return {
+        ok: false,
+        error: `Could not find a Whisper server at ${normalized.url}. Check the address and that the server is running.`,
+      };
+    }
+
+    setServerUrl(normalized.url);
+    log.info(`[server] using ${normalized.url}`);
+    return { ok: true, server: serverInfo() };
   });
 
   // -------------------------------------------------------------------------

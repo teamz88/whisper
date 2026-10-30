@@ -1,0 +1,10 @@
+# Caddy gets and renews the HTTPS certificate for {$DOMAIN} by itself. That
+# needs the domain to point at this server and ports 80 and 443 to be open.
+{$DOMAIN} {
+	# A dictation is at most ~20 MB of audio (10 minutes); refuse anything bigger.
+	request_body {
+		max_size 30MB
+	}
+
+	reverse_proxy api:8080
+}
