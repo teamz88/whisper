@@ -10,7 +10,7 @@ import { registerIpc, syncSettingsFromServer, type AppContext } from './ipc.js';
 import { log } from './log.js';
 import { enableStartAtLoginOnce } from './login-item.js';
 import { RecordingController } from './recording/controller.js';
-import { getStoredSettings } from './store.js';
+import { getServerUrl, getStoredSettings } from './store.js';
 import { Updates } from './updates.js';
 import { DashboardWindow } from './windows/dashboard.js';
 import { OverlayWindow } from './windows/overlay.js';
@@ -27,7 +27,10 @@ import { AppTray } from './windows/tray.js';
 const DEV = process.env['ELECTRON_RENDERER_URL'] !== undefined;
 
 const envApiUrl = import.meta.env.VITE_API_URL;
-const apiUrl = envApiUrl !== undefined && envApiUrl !== '' ? envApiUrl : 'http://localhost:8080';
+/** The server built into this installer; a custom one overrides it at runtime. */
+const defaultApiUrl =
+  envApiUrl !== undefined && envApiUrl !== '' ? envApiUrl : 'http://localhost:8080';
+const getApiUrl = (): string => getServerUrl() ?? defaultApiUrl;
 const apiUrlMissing = (envApiUrl === undefined || envApiUrl === '') && !DEV;
 
 // A tray app must be a singleton: a second launch would register a second
@@ -50,7 +53,7 @@ async function main(): Promise<void> {
   };
 
   const api = new ApiClient({
-    baseUrl: apiUrl,
+    getBaseUrl: getApiUrl,
     onSignedOut: (reason) => {
       profile = null;
       broadcast('auth:signed-out', { reason });
@@ -124,7 +127,8 @@ async function main(): Promise<void> {
     tray,
     listener,
     updates,
-    apiUrl,
+    getApiUrl,
+    defaultApiUrl,
     apiUrlMissing,
     broadcast,
     getProfile: () => profile,
@@ -222,5 +226,5 @@ async function main(): Promise<void> {
     dashboard.show();
   }
 
-  log.info(`[boot] ready · api=${apiUrl} · signed-in=${restored !== null}`);
+  log.info(`[boot] ready · api=${getApiUrl()} · signed-in=${restored !== null}`);
 }

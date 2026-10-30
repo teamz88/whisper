@@ -1,0 +1,4 @@
+# Shell scripts and Docker files must keep LF line endings: they run on Linux.
+*.sh text eol=lf
+selfhost/Caddyfile text eol=lf
+Dockerfile text eol=lf

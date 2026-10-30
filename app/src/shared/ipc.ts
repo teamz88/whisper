@@ -59,6 +59,20 @@ export interface ChangePasswordResult {
   error?: string;
 }
 
+/** Which server the app talks to. `custom` = chosen on the sign-in screen. */
+export interface ServerInfo {
+  url: string;
+  defaultUrl: string;
+  custom: boolean;
+}
+
+export interface SetServerResult {
+  ok: boolean;
+  /** User-facing text when ok is false. */
+  error?: string;
+  server?: ServerInfo;
+}
+
 export interface ListSessionsPayload {
   page: number;
   search?: string;
@@ -126,6 +140,10 @@ export interface IpcInvokeMap {
   'auth:login': { req: LoginPayload; res: LoginResult };
   'auth:logout': { req: void; res: void };
   'auth:change-password': { req: ChangePasswordPayload; res: ChangePasswordResult };
+
+  'server:get': { req: void; res: ServerInfo };
+  /** url null = back to the built-in server. Refused while signed in. */
+  'server:set': { req: { url: string | null }; res: SetServerResult };
 
   'profile:get': { req: void; res: Profile };
   'profile:update': { req: UpdateProfileRequest; res: Profile };
@@ -246,6 +264,8 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'auth:login',
   'auth:logout',
   'auth:change-password',
+  'server:get',
+  'server:set',
   'profile:get',
   'profile:update',
   'settings:get',

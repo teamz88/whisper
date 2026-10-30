@@ -29,6 +29,8 @@ interface StoreSchema {
   micDeviceId: string | null;
   /** Start-at-login was switched on once; from then on the user's choice stands. */
   loginItemSet: boolean;
+  /** Self-hosted server chosen on the sign-in screen; null = the one built in. */
+  serverUrl: string | null;
 }
 
 const store = new Store<StoreSchema>({
@@ -39,6 +41,7 @@ const store = new Store<StoreSchema>({
     onboarded: false,
     micDeviceId: null,
     loginItemSet: false,
+    serverUrl: null,
   },
 });
 
@@ -85,6 +88,14 @@ export function getLoginItemSet(): boolean {
 
 export function setLoginItemSet(set: boolean): void {
   store.set('loginItemSet', set);
+}
+
+export function getServerUrl(): string | null {
+  return store.get('serverUrl');
+}
+
+export function setServerUrl(url: string | null): void {
+  store.set('serverUrl', url);
 }
 
 /** Sign-out wipes credentials but keeps device-local preferences. */

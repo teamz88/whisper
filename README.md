@@ -4,8 +4,10 @@ Push-to-talk voice dictation for the team. Hold a shortcut anywhere on your
 computer, speak, let go — what you said is typed into whatever app you were
 using. Gmail, Slack, Notion, your IDE, anywhere a cursor blinks.
 
-> **Internal use only.** The installer is unsigned and distribution is through
-> our private GitHub repo. Do not distribute outside the team.
+> **Open source (MIT).** You can run your own Whisper server and use the desktop
+> app with it: see **[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md)**, a step-by-step
+> guide written for non-technical people. The installers are unsigned, so Windows
+> and macOS warn on first launch.
 
 ## How it's put together
 
