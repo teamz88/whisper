@@ -24,6 +24,8 @@ export interface Env {
   provider: TranscriptionProvider;
   apiKey: string;
   baseURL: string;
+  /** Azure OpenAI only. */
+  azureApiVersion: string;
   fastModel: string;
   accurateModel: string;
   cleanupModel: string;
@@ -106,20 +108,29 @@ export function loadEnv(): Env {
 
   const providerRaw = readString('TRANSCRIPTION_PROVIDER', 'groq')!;
   if (!isTranscriptionProvider(providerRaw)) {
-    problems.push(`TRANSCRIPTION_PROVIDER must be "groq" or "openai" (got "${providerRaw}")`);
+    problems.push(`TRANSCRIPTION_PROVIDER must be "groq", "openai" or "azure" (got "${providerRaw}")`);
   }
   const provider: TranscriptionProvider = isTranscriptionProvider(providerRaw)
     ? providerRaw
     : 'groq';
   const defaults = PROVIDER_DEFAULTS[provider];
 
-  const apiKey =
-    provider === 'groq' ? readString('GROQ_API_KEY') : readString('OPENAI_API_KEY');
+  const keyVar =
+    provider === 'groq'
+      ? 'GROQ_API_KEY'
+      : provider === 'azure'
+        ? 'AZURE_OPENAI_API_KEY'
+        : 'OPENAI_API_KEY';
+  const apiKey = readString(keyVar);
   if (apiKey === undefined) {
+    problems.push(`${keyVar} is required when TRANSCRIPTION_PROVIDER=${provider}`);
+  }
+
+  // Azure addresses a resource, not a shared host: the endpoint is required.
+  const azureEndpoint = readString('AZURE_OPENAI_ENDPOINT');
+  if (provider === 'azure' && azureEndpoint === undefined) {
     problems.push(
-      provider === 'groq'
-        ? 'GROQ_API_KEY is required when TRANSCRIPTION_PROVIDER=groq'
-        : 'OPENAI_API_KEY is required when TRANSCRIPTION_PROVIDER=openai',
+      'AZURE_OPENAI_ENDPOINT is required when TRANSCRIPTION_PROVIDER=azure (https://<resource>.openai.azure.com)',
     );
   }
 
@@ -151,7 +162,11 @@ export function loadEnv(): Env {
     corsOrigin,
     provider,
     apiKey: apiKey!,
-    baseURL: readString('AI_BASE_URL', defaults.baseURL)!,
+    baseURL:
+      provider === 'azure'
+        ? (azureEndpoint ?? '')
+        : readString('AI_BASE_URL', defaults.baseURL)!,
+    azureApiVersion: readString('AZURE_OPENAI_API_VERSION', '2024-10-21')!,
     fastModel: readString('TRANSCRIBE_FAST_MODEL', defaults.fastModel)!,
     accurateModel: readString('TRANSCRIBE_ACCURATE_MODEL', defaults.accurateModel)!,
     cleanupModel: readString('CLEANUP_MODEL', defaults.cleanupModel)!,

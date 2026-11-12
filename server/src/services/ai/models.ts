@@ -11,7 +11,7 @@ import { needsHighAccuracyModel, type LanguageCode } from '@whisper/shared';
  * the provider's live models and warns when a configured id has disappeared.
  */
 
-export const TRANSCRIPTION_PROVIDERS = ['groq', 'openai'] as const;
+export const TRANSCRIPTION_PROVIDERS = ['groq', 'openai', 'azure'] as const;
 
 export type TranscriptionProvider = (typeof TRANSCRIPTION_PROVIDERS)[number];
 
@@ -51,6 +51,19 @@ export const PROVIDER_DEFAULTS: Record<TranscriptionProvider, ProviderDefaults> 
      */
     fastModel: 'whisper-1',
     accurateModel: 'whisper-1',
+    cleanupModel: 'gpt-4o-mini',
+  },
+  /**
+   * Azure OpenAI. The "model" values below are DEPLOYMENT NAMES — whatever you
+   * called the deployment in Azure AI Foundry — not model ids. These are only
+   * guesses at common names; set TRANSCRIBE_FAST_MODEL, TRANSCRIBE_ACCURATE_MODEL
+   * and CLEANUP_MODEL to your real deployment names. The endpoint comes from
+   * AZURE_OPENAI_ENDPOINT, so baseURL here is unused.
+   */
+  azure: {
+    baseURL: '',
+    fastModel: 'whisper',
+    accurateModel: 'whisper',
     cleanupModel: 'gpt-4o-mini',
   },
 };

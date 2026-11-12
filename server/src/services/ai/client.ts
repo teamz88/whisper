@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { AzureOpenAI } from 'openai';
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { Env } from '../../env.js';
@@ -12,6 +12,17 @@ import type { Env } from '../../env.js';
  * that quietly triple a user's worst-case latency.
  */
 export function createAiClient(env: Env): OpenAI {
+  if (env.provider === 'azure') {
+    // Azure routes by deployment name (the `model` field) under the resource
+    // endpoint and authenticates with an `api-key` header; AzureOpenAI does both.
+    return new AzureOpenAI({
+      apiKey: env.apiKey,
+      endpoint: env.baseURL,
+      apiVersion: env.azureApiVersion,
+      maxRetries: 0,
+      timeout: 120_000,
+    });
+  }
   return new OpenAI({
     apiKey: env.apiKey,
     baseURL: env.baseURL,
@@ -35,6 +46,23 @@ export async function warmAiClient(
   logger: FastifyBaseLogger,
 ): Promise<void> {
   const started = Date.now();
+
+  if (env.provider === 'azure') {
+    // Azure's /models lists base models, not your deployments, so the id check
+    // below would warn falsely. A cheap authenticated call still warms DNS/TLS
+    // and surfaces a wrong endpoint or key at boot.
+    try {
+      await client.models.list();
+      logger.info(
+        `[ai] azure ready in ${Date.now() - started}ms · deployments stt=${env.fastModel}/${env.accurateModel} · cleanup=${env.cleanupModel}`,
+      );
+    } catch (error) {
+      logger.warn(
+        `[ai] could not reach azure at boot: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
+  }
 
   try {
     const list = await client.models.list();
