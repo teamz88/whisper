@@ -42,6 +42,12 @@ services:
       TRANSCRIPTION_PROVIDER: ${TRANSCRIPTION_PROVIDER:-groq}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      TRANSCRIBE_FAST_MODEL: ${TRANSCRIBE_FAST_MODEL:-}
+      TRANSCRIBE_ACCURATE_MODEL: ${TRANSCRIBE_ACCURATE_MODEL:-}
+      CLEANUP_MODEL: ${CLEANUP_MODEL:-}
       # The desktop app sends no Origin header; there is no browser client.
       CORS_ORIGIN: '*'
     # Applying the migrations on every start is safe (they are idempotent and
