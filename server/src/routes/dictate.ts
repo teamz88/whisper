@@ -39,6 +39,17 @@ function readField(file: MultipartFile, name: string): string | undefined {
   return value === undefined || value === null ? undefined : String(value);
 }
 
+/**
+ * For the log line only. Current clients send Ogg Opus, older ones WAV;
+ * the provider sniffs the real format from the filename and content type, so
+ * both pass through to it unchanged.
+ */
+function audioFormat(filename: string, mimetype: string): string {
+  if (/\.ogg$/i.test(filename) || /ogg|opus/i.test(mimetype)) return 'opus';
+  if (/\.wav$/i.test(filename) || /wav/i.test(mimetype)) return 'wav';
+  return mimetype === '' ? 'unknown' : mimetype;
+}
+
 function readBoolField(file: MultipartFile, name: string): boolean | undefined {
   const raw = readField(file, name);
   if (raw === undefined) return undefined;
@@ -83,7 +94,11 @@ export function registerDictateRoute(
       }
 
       // Buffering is where a file-size breach surfaces, not at request.file().
+      // It is also where the client's upload actually arrives — on a slow
+      // connection this, not the AI, was most of the wait — so it is timed.
       const audio = await file.toBuffer();
+      const uploadMs = Date.now() - startedAt;
+      const upload = `upload ${uploadMs}ms ${(audio.byteLength / 1024).toFixed(0)}kB ${audioFormat(file.filename, file.mimetype)}`;
 
       if (audio.byteLength === 0) {
         throw badRequest('The recording was empty.');
@@ -157,7 +172,7 @@ export function registerDictateRoute(
       const verdict = classifyTranscript(raw);
       if (verdict.hallucination) {
         request.log.info(
-          `[dictate] user=${userId} discarded (${verdict.reason}) whisper ${whisperMs}ms · total ${Date.now() - startedAt}ms`,
+          `[dictate] user=${userId} discarded (${verdict.reason}) ${upload} · whisper ${whisperMs}ms · total ${Date.now() - startedAt}ms`,
         );
         return { discarded: true, reason: verdict.reason };
       }
@@ -182,7 +197,7 @@ export function registerDictateRoute(
 
         if (result.kind === 'no-speech') {
           request.log.info(
-            `[dictate] user=${userId} discarded (no-speech) whisper ${whisperMs}ms · cleanup ${cleanupMs}ms · total ${Date.now() - startedAt}ms`,
+            `[dictate] user=${userId} discarded (no-speech) ${upload} · whisper ${whisperMs}ms · cleanup ${cleanupMs}ms · total ${Date.now() - startedAt}ms`,
           );
           return { discarded: true, reason: 'no-speech' };
         }
@@ -208,7 +223,7 @@ export function registerDictateRoute(
 
       const totalMs = Date.now() - startedAt;
       request.log.info(
-        `[dictate] user=${userId} whisper ${whisperMs}ms · cleanup ${cleanupMs}ms · total ${totalMs}ms · ${wordCount}w · model=${model}(${reason})${settings.historyStorage ? '' : ' · not stored'}`,
+        `[dictate] user=${userId} ${upload} · whisper ${whisperMs}ms · cleanup ${cleanupMs}ms · total ${totalMs}ms · ${wordCount}w · model=${model}(${reason})${settings.historyStorage ? '' : ' · not stored'}`,
       );
 
       reply.code(200);

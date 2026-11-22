@@ -48,5 +48,5 @@ export function isDiscarded(response: DictateResponse): response is DictateDisca
   return response.discarded === true;
 }
 
-/** The multipart field name the server reads the WAV from. */
+/** The multipart field name the server reads the audio (Ogg Opus, or WAV from older clients) from. */
 export const DICTATE_AUDIO_FIELD = 'audio';

@@ -20,7 +20,8 @@ import {
 } from '../../shared/overlay.js';
 import type { ApiClient } from '../api/client.js';
 import { trimSilence } from '../audio/trim.js';
-import { encodeWav, samplesToMs } from '../audio/wav.js';
+import { encodeForUpload } from '../audio/encode.js';
+import { samplesToMs } from '../audio/wav.js';
 import { getFocusedAppName } from '../inject/focused-app.js';
 import { pasteText } from '../inject/paste.js';
 import { log } from '../log.js';
@@ -330,12 +331,16 @@ export class RecordingController {
     }
 
     const samples = trimmed.samples;
-    const wav = encodeWav(samples, payload.sampleRate);
+    const encodeStartedAt = Date.now();
+    const audio = encodeForUpload(samples, payload.sampleRate);
+    if (audio.fallbackReason !== undefined) {
+      log.warn(`[rec] #${generation} opus encoding failed, sending wav: ${audio.fallbackReason}`);
+    }
 
     log.info(
       `[rec] #${generation} audio ready: ${samplesToMs(samples.length, payload.sampleRate)}ms of samples ` +
-        `(${trimmed.trimmedMs}ms of silence trimmed), ${(wav.byteLength / 1024).toFixed(0)} kB wav, ` +
-        `mic open ${durationMs}ms`,
+        `(${trimmed.trimmedMs}ms of silence trimmed), ${(audio.bytes.byteLength / 1024).toFixed(0)} kB ${audio.format} ` +
+        `(encoded in ${Date.now() - encodeStartedAt}ms), mic open ${durationMs}ms`,
     );
 
     // Field order is a protocol detail, not a style choice: the server reads
@@ -350,8 +355,8 @@ export class RecordingController {
     form.append('audioStoppedAt', String(payload.audioStoppedAt));
     form.append(
       DICTATE_AUDIO_FIELD,
-      new Blob([new Uint8Array(wav)], { type: 'audio/wav' }),
-      'dictation.wav',
+      new Blob([new Uint8Array(audio.bytes)], { type: audio.mimetype }),
+      audio.filename,
     );
 
     const startedAt = Date.now();
