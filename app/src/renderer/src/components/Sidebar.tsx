@@ -105,7 +105,7 @@ export function Sidebar(): ReactNode {
           <span className="text-ink-faint">]</span>
         </span>
         {isAdmin(profile) ? (
-          <span className="inline-flex h-4 items-center rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold tracking-wide text-accent-strong">
+          <span className="inline-flex h-4 items-center rounded-full bg-accent-soft px-1.5 text-[10px] font-semibold tracking-wide text-accent-ink">
             ADMIN
           </span>
         ) : null}
@@ -123,7 +123,7 @@ export function Sidebar(): ReactNode {
               className={cn(
                 'no-drag flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors',
                 active
-                  ? 'bg-accent-soft font-medium text-accent-strong'
+                  ? 'bg-accent-soft font-medium text-accent-ink'
                   : 'text-ink-soft hover:bg-line-soft',
               )}
             >

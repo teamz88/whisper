@@ -337,7 +337,7 @@ export function TeamSection(): ReactNode {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {user.role === 'admin' ? (
-                  <Chip className="bg-accent-soft text-accent-strong">ADMIN</Chip>
+                  <Chip className="bg-accent-soft text-accent-ink">ADMIN</Chip>
                 ) : (
                   <Chip>MEMBER</Chip>
                 )}

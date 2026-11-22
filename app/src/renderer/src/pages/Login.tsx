@@ -71,7 +71,7 @@ function ServerPicker(): ReactNode {
         Server: {hostOf(server.url)}{' '}
         <button
           type="button"
-          className="no-drag text-accent-strong underline-offset-2 hover:underline"
+          className="no-drag text-accent-ink underline-offset-2 hover:underline"
           onClick={() => {
             setInput(server.custom ? server.url : '');
             setError(null);

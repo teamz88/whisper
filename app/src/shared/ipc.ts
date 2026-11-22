@@ -129,6 +129,9 @@ export interface MicDevice {
   label: string;
 }
 
+/** 'system' follows the OS light/dark setting, live. */
+export type ThemePreference = 'system' | 'light' | 'dark';
+
 // ---------------------------------------------------------------------------
 // renderer -> main, request/response
 // ---------------------------------------------------------------------------
@@ -191,6 +194,10 @@ export interface IpcInvokeMap {
    */
   'mic:get-device': { req: void; res: string | null };
   'mic:set-device': { req: { deviceId: string | null }; res: void };
+
+  /** Device-local like the mic: how this computer shows the app, not an account setting. */
+  'theme:get': { req: void; res: ThemePreference };
+  'theme:set': { req: { theme: ThemePreference }; res: void };
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap;
@@ -294,6 +301,8 @@ export const INVOKE_CHANNELS: readonly IpcInvokeChannel[] = [
   'clipboard:write',
   'mic:get-device',
   'mic:set-device',
+  'theme:get',
+  'theme:set',
 ];
 
 export const SEND_CHANNELS: readonly IpcSendChannel[] = [

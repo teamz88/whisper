@@ -15,6 +15,7 @@ import { log } from './log.js';
 import { enableStartAtLoginOnce } from './login-item.js';
 import { RecordingController } from './recording/controller.js';
 import { getServerUrl, getStoredSettings } from './store.js';
+import { initTheme } from './theme.js';
 import { Updates } from './updates.js';
 import { DashboardWindow } from './windows/dashboard.js';
 import { OverlayWindow } from './windows/overlay.js';
@@ -47,6 +48,9 @@ if (!app.requestSingleInstanceLock()) {
 
 async function main(): Promise<void> {
   let profile: Profile | null = null;
+
+  // Before any window exists, so the first paint is already in the right theme.
+  initTheme();
 
   const dashboard = new DashboardWindow();
   const overlay = new OverlayWindow(getStoredSettings().overlayPosition);

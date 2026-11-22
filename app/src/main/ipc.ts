@@ -35,6 +35,7 @@ import { normalizeServerUrl } from './server-url.js';
 import type { RecordingController } from './recording/controller.js';
 import {
   getMicDeviceId,
+  getThemePreference,
   getOnboarded,
   getServerUrl,
   getStoredSettings,
@@ -43,6 +44,7 @@ import {
   setServerUrl,
   setStoredSettings,
 } from './store.js';
+import { isThemePreference, saveThemePreference } from './theme.js';
 import type { Updates } from './updates.js';
 import type { DashboardWindow } from './windows/dashboard.js';
 import type { OverlayWindow } from './windows/overlay.js';
@@ -388,6 +390,14 @@ export function registerIpc(context: AppContext): void {
 
   handle('mic:set-device', ({ deviceId }) => {
     setMicDeviceId(deviceId);
+  });
+
+  handle('theme:get', () => getThemePreference());
+
+  handle('theme:set', ({ theme }) => {
+    // Renderer input: validated rather than trusted, like every other handler.
+    if (!isThemePreference(theme)) return;
+    saveThemePreference(theme);
   });
 
   // -------------------------------------------------------------------------

@@ -2,6 +2,8 @@ import Store from 'electron-store';
 
 import { DEFAULT_SETTINGS, type Settings } from '@whisper/shared';
 
+import type { ThemePreference } from '../shared/ipc.js';
+
 /**
  * Local persistence: auth tokens, a mirror of the user's settings, and the
  * onboarding flag.
@@ -31,6 +33,8 @@ interface StoreSchema {
   loginItemSet: boolean;
   /** Self-hosted server chosen on the sign-in screen; null = the one built in. */
   serverUrl: string | null;
+  /** Client-side only: a look preference for this computer, not the account. */
+  theme: ThemePreference;
 }
 
 const store = new Store<StoreSchema>({
@@ -42,8 +46,19 @@ const store = new Store<StoreSchema>({
     micDeviceId: null,
     loginItemSet: false,
     serverUrl: null,
+    theme: 'system',
   },
 });
+
+export function getThemePreference(): ThemePreference {
+  const theme = store.get('theme');
+  // A hand-edited or future value must not leave nativeTheme in a bad state.
+  return theme === 'light' || theme === 'dark' ? theme : 'system';
+}
+
+export function setThemePreference(theme: ThemePreference): void {
+  store.set('theme', theme);
+}
 
 export function getStoredAuth(): StoredAuth | null {
   return store.get('auth');

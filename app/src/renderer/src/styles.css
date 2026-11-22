@@ -11,6 +11,10 @@
   --color-accent: #72a0c1;
   --color-accent-strong: #5b89aa;
   --color-accent-soft: #e4edf4;
+  /* Accent used as TEXT (links, active nav, badges). Separate from
+     accent-strong, which is a hover background behind white text: in dark mode
+     the two need opposite directions — lighter for text, darker for fills. */
+  --color-accent-ink: #5b89aa;
 
   /* Surfaces */
   --color-card: #fbf9f4;
@@ -28,6 +32,9 @@
   --color-danger-soft: #f6e4e2;
   --color-success: #3f7d54;
 
+  /* Modal backdrop, alpha baked in so each theme can dim by its own amount. */
+  --color-scrim: rgb(34 30 24 / 0.25);
+
   /*
    * Inter is not bundled — an offline desktop app cannot fetch webfonts, and a
    * missing font must not become a missing UI. Inter is used when the user has
@@ -38,6 +45,43 @@
     'Helvetica Neue', Arial, sans-serif;
   --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
   --font-mono: 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/*
+ * Dark theme: the same tokens, re-pointed. Every utility reads its colour
+ * through var(--color-*), so nothing in the components changes.
+ *
+ * The switch is the media query alone. Main sets nativeTheme.themeSource from
+ * the user's Light / Dark / System choice, which is exactly what this query
+ * reports, in the dashboard and the overlay alike. Deliberately unlayered: it
+ * must beat the @theme defaults, which live in Tailwind's `theme` layer.
+ *
+ * Warm near-blacks rather than neutral greys, so dark mode still reads as the
+ * same cream-and-ink app with the lights down.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-cream: #1a1814;
+    --color-accent: #72a0c1;
+    --color-accent-strong: #5b89aa;
+    --color-accent-soft: #1f2d38;
+    --color-accent-ink: #9cc3de;
+
+    --color-card: #221f1a;
+    --color-raised: #2a2620;
+    --color-line: #3b362e;
+    --color-line-soft: #302c26;
+
+    --color-ink: #ede6d8;
+    --color-ink-soft: #bfb6a7;
+    --color-ink-faint: #8c8376;
+
+    --color-danger: #df6f63;
+    --color-danger-soft: #3a2421;
+    --color-success: #66b07e;
+
+    --color-scrim: rgb(0 0 0 / 0.55);
+  }
 }
 
 @layer base {
@@ -66,10 +110,10 @@
     cursor: default;
   }
 
-  /* The theme is light-locked by design, but the OS still tells the embedded
-     Chromium to render form controls dark unless we say otherwise. */
+  /* Native form controls (select popups, checkboxes) and scrollbars follow the
+     active theme too, instead of staying light inside a dark window. */
   :root {
-    color-scheme: light;
+    color-scheme: light dark;
   }
 
   input,

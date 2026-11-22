@@ -21,7 +21,6 @@ import { TeamSection } from '../components/TeamSection.js';
 import {
   Button,
   Card,
-  Chip,
   Modal,
   SectionTitle,
   Select,
@@ -31,6 +30,7 @@ import {
   TextField,
   Toggle,
 } from '../components/ui.js';
+import type { ThemePreference } from '../../../shared/ipc.js';
 import { bridge } from '../lib/bridge.js';
 import { cn } from '../lib/cn.js';
 import { formatCount, pluralise } from '../lib/format.js';
@@ -50,6 +50,16 @@ function MicTest({ deviceId }: { deviceId: string }): ReactNode {
       </span>
     </div>
   );
+}
+
+const THEME_OPTIONS: Array<{ value: ThemePreference; label: string }> = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+function isThemeOption(value: string): value is ThemePreference {
+  return THEME_OPTIONS.some((option) => option.value === value);
 }
 
 function SettingsGroup({ title, children }: { title: string; children: ReactNode }): ReactNode {
@@ -124,6 +134,22 @@ export function Settings(): ReactNode {
       label: device.label !== '' ? device.label : `Microphone ${index + 1}`,
     })),
   ];
+
+  // --- Theme (device-local; main applies it to every window at once). --------
+  const [theme, setTheme] = useState<ThemePreference>('system');
+  useEffect(() => {
+    let cancelled = false;
+    void bridge.invoke('theme:get').then((saved) => {
+      if (!cancelled) setTheme(saved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const pickTheme = (next: ThemePreference): void => {
+    setTheme(next);
+    void bridge.invoke('theme:set', { theme: next });
+  };
 
   // --- Delete all history. ----------------------------------------------------
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -392,7 +418,16 @@ export function Settings(): ReactNode {
         <Card>
           <SettingRow
             label="Theme"
-            control={<Chip className="opacity-70">Light (locked)</Chip>}
+            hint="System follows your computer's light or dark setting."
+            control={
+              <Select
+                options={THEME_OPTIONS}
+                value={theme}
+                onChange={(next) => {
+                  if (isThemeOption(next)) pickTheme(next);
+                }}
+              />
+            }
           />
           <SettingRow
             label="Overlay position"

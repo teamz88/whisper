@@ -1,7 +1,9 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BrowserWindow, Menu, shell } from 'electron';
+import { BrowserWindow, Menu, nativeTheme, shell } from 'electron';
+
+import { windowBackground } from '../theme.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -43,7 +45,7 @@ export class DashboardWindow {
       frame: false,
       // macOS keeps its traffic lights over our React titlebar.
       ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
-      backgroundColor: '#F1ECE0',
+      backgroundColor: windowBackground(),
       title: 'Whisper',
       webPreferences: {
         preload: join(__dirname, '../preload/index.mjs'),
@@ -67,7 +69,15 @@ export class DashboardWindow {
       }
     });
 
+    // Keep the native background in step with the theme, so a resize or a
+    // slow repaint never flashes the other theme's colour at the edges.
+    const syncBackground = (): void => {
+      this.window?.setBackgroundColor(windowBackground());
+    };
+    nativeTheme.on('updated', syncBackground);
+
     this.window.on('closed', () => {
+      nativeTheme.removeListener('updated', syncBackground);
       this.window = null;
       this.onHidden?.();
     });
