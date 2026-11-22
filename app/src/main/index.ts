@@ -1,3 +1,7 @@
+// Must stay the first import: it moves dev runs onto their own profile folder
+// before store.ts (imported below) opens the settings file.
+import './dev-profile.js';
+
 import { app, shell } from 'electron';
 
 import { hotkeyLabel, parseHotkey, type Profile } from '@whisper/shared';
