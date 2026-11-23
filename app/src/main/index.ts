@@ -64,6 +64,8 @@ async function main(): Promise<void> {
     getBaseUrl: getApiUrl,
     onSignedOut: (reason) => {
       profile = null;
+      // The next person at this computer must not be able to copy it.
+      controller.clearLastTranscript();
       broadcast('auth:signed-out', { reason });
       if (reason !== 'user') dashboard.show(); // surface the login screen
     },
@@ -77,6 +79,7 @@ async function main(): Promise<void> {
     waitForModifiersReleased: (timeoutMs): Promise<boolean> =>
       listener.waitForModifiersReleased(timeoutMs),
     getInputActivity: (): number => listener.getInputActivity(),
+    onLastTranscriptChanged: (available) => tray.setLastDictationAvailable(available),
   });
 
   // A dead overlay renderer means no audio-ready/audio-empty will ever arrive;
@@ -116,6 +119,7 @@ async function main(): Promise<void> {
     bootHotkey.mode,
     {
       onOpenDashboard: openDashboard,
+      onCopyLastDictation: () => void controller.copyLastTranscript(),
       onSignOut: () => void api.logout(),
       onOpenLogs: () => void shell.openPath(app.getPath('logs')),
       onQuit: () => {

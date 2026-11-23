@@ -8,8 +8,9 @@ import { OverlayRecorder } from './recorder.js';
 
 /**
  * The floating pill. Renders whatever state main last sent, and runs the
- * microphone whenever that state is 'listening' — the window is never
- * focusable, so everything here is display plus audio, no interaction.
+ * microphone whenever that state is 'listening'. The window is never
+ * focusable; the only interaction is the Copy button, which a click reaches
+ * without taking focus from the app being dictated into.
  */
 export function OverlayApp(): ReactNode {
   const [state, setState] = useState<OverlayState>({ kind: 'idle' });
@@ -94,15 +95,64 @@ export function OverlayApp(): ReactNode {
 
   if (state.kind === 'idle') return null;
 
+  // Main holds its timers while the mouse is over the overlay, so it never
+  // disappears from under a cursor on its way to the Copy button.
+  const hover = {
+    onMouseEnter: () => bridge.send('overlay:hover', { hovering: true }),
+    onMouseLeave: () => bridge.send('overlay:hover', { hovering: false }),
+  };
+
+  // Content is centred in the window: main resizes the window for the chip,
+  // and centred content looks right on both sides of that resize.
   return (
-    <div className="flex h-[52px] w-[280px] items-center overflow-hidden rounded-full border border-line bg-raised/95 px-4 shadow-lg backdrop-blur animate-fade-in">
-      {state.kind === 'listening' ? <Listening startedAt={state.startedAt} /> : null}
-      {state.kind === 'processing' ? <Processing /> : null}
-      {state.kind === 'done' ? (
-        <Done text={state.text} wordCount={state.wordCount} pasted={state.pasted} />
-      ) : null}
-      {state.kind === 'error' ? <ErrorView message={state.message} /> : null}
+    <div className="flex h-screen w-screen items-center justify-center">
+      {state.kind === 'copy' ? (
+        <CopyChip copied={state.copied} {...hover} />
+      ) : (
+        <div
+          {...hover}
+          className="flex h-[52px] w-[280px] items-center overflow-hidden rounded-full border border-line bg-raised/95 px-4 shadow-lg backdrop-blur animate-fade-in"
+        >
+          {state.kind === 'listening' ? <Listening startedAt={state.startedAt} /> : null}
+          {state.kind === 'processing' ? <Processing /> : null}
+          {state.kind === 'done' ? (
+            <Done text={state.text} wordCount={state.wordCount} pasted={state.pasted} />
+          ) : null}
+          {state.kind === 'error' ? <ErrorView message={state.message} /> : null}
+        </div>
+      )}
     </div>
+  );
+}
+
+const copyLast = (): void => bridge.send('overlay:copy');
+
+/** The small pill the done state shrinks into: one click copies the transcript. */
+function CopyChip({
+  copied,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  copied: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}): ReactNode {
+  return (
+    <button
+      type="button"
+      onClick={copyLast}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      disabled={copied}
+      aria-label="Copy last transcript"
+      className={cn(
+        'flex h-9 w-[92px] items-center justify-center gap-1.5 rounded-full border border-line bg-raised/95 text-[13px] font-medium shadow-lg backdrop-blur animate-chip-in',
+        copied ? 'text-success' : 'text-ink hover:bg-accent-soft hover:text-accent-ink',
+      )}
+    >
+      {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
   );
 }
 
@@ -173,11 +223,36 @@ function Done({
           </span>
         </>
       ) : (
-        <span className="ml-2.5 truncate text-[13px] text-ink">
+        <span className="ml-2.5 min-w-0 truncate text-[13px] text-ink">
           On clipboard — paste with {navigator.platform.startsWith('Mac') ? '⌘V' : 'Ctrl+V'}
         </span>
       )}
+      <button
+        type="button"
+        onClick={copyLast}
+        aria-label="Copy transcript"
+        className={cn(
+          'ml-2 -mr-2 flex size-8 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-accent-soft hover:text-accent-ink',
+          !pasted && 'ml-auto',
+        )}
+      >
+        <CopyIcon className="size-4" />
+      </button>
     </>
+  );
+}
+
+function CopyIcon({ className }: { className?: string }): ReactNode {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <rect x="5.25" y="5.25" width="8" height="8" rx="1.75" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M10.75 3.25v-.5a1.5 1.5 0 0 0-1.5-1.5h-5.5a1.5 1.5 0 0 0-1.5 1.5v5.5a1.5 1.5 0 0 0 1.5 1.5h.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

@@ -1,4 +1,4 @@
-import { BrowserWindow, app, clipboard, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, ipcMain, shell } from 'electron';
 
 import {
   hotkeyLabel,
@@ -30,6 +30,7 @@ import type {
 } from '../shared/ipc.js';
 import type { ApiClient } from './api/client.js';
 import type { HotkeyListener } from './hotkey/listener.js';
+import { copyText } from './inject/paste.js';
 import { log } from './log.js';
 import { normalizeServerUrl } from './server-url.js';
 import type { RecordingController } from './recording/controller.js';
@@ -383,7 +384,9 @@ export function registerIpc(context: AppContext): void {
   });
 
   handle('clipboard:write', ({ text }) => {
-    clipboard.writeText(text);
+    // Not clipboard.writeText: a pending post-paste restore would overwrite a
+    // transcript copied from History within its 8 s window.
+    copyText(text);
   });
 
   handle('mic:get-device', () => getMicDeviceId());
@@ -418,6 +421,14 @@ export function registerIpc(context: AppContext): void {
 
   ipcMain.on('overlay:stop-requested', (_event, payload: { reason: 'escape' | 'max-duration' }) => {
     context.controller.onOverlayStopRequested(payload.reason);
+  });
+
+  ipcMain.on('overlay:copy', () => {
+    context.controller.copyLastTranscript();
+  });
+
+  ipcMain.on('overlay:hover', (_event, payload: { hovering: boolean }) => {
+    context.overlay.setHovered(payload?.hovering === true);
   });
 
   ipcMain.on('renderer:ready', () => {

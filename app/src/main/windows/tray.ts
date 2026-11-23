@@ -14,6 +14,8 @@ import { log } from '../log.js';
 
 export interface TrayCallbacks {
   onOpenDashboard: () => void;
+  /** For a dictation that landed in the wrong place, after the overlay is gone. */
+  onCopyLastDictation: () => void;
   onSignOut: () => void;
   /** For bug reports: the packaged app's only log is a file. */
   onOpenLogs: () => void;
@@ -65,6 +67,7 @@ export class AppTray {
   private hotkeyLabel: string;
   /** Hold vs toggle changes the verb the menu uses — see setHotkey(). */
   private hotkeyMode: HotkeyMode;
+  private hasLastDictation = false;
 
   constructor(hotkeyLabel: string, hotkeyMode: HotkeyMode, callbacks: TrayCallbacks) {
     this.hotkeyLabel = hotkeyLabel;
@@ -97,6 +100,13 @@ export class AppTray {
     this.rebuildMenu();
   }
 
+  /** Greys "Copy Last Dictation" out until there is one. */
+  setLastDictationAvailable(available: boolean): void {
+    if (this.hasLastDictation === available) return;
+    this.hasLastDictation = available;
+    this.rebuildMenu();
+  }
+
   destroy(): void {
     this.tray?.destroy();
     this.tray = null;
@@ -116,6 +126,11 @@ export class AppTray {
     const menu = Menu.buildFromTemplate([
       { label: 'Open Dashboard', click: () => this.callbacks.onOpenDashboard() },
       { label: `Dictate: ${this.verb()} ${this.hotkeyLabel}`, enabled: false },
+      {
+        label: 'Copy Last Dictation',
+        enabled: this.hasLastDictation,
+        click: () => this.callbacks.onCopyLastDictation(),
+      },
       { type: 'separator' },
       { label: 'Sign Out', click: () => this.callbacks.onSignOut() },
       { label: 'Open Logs Folder', click: () => this.callbacks.onOpenLogs() },

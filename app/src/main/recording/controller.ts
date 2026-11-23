@@ -12,6 +12,8 @@ import type {
   RecordingState,
 } from '../../shared/ipc.js';
 import {
+  OVERLAY_COPIED_MS,
+  OVERLAY_COPY_CHIP_MS,
   OVERLAY_DONE_FADE_MS,
   OVERLAY_DONE_PREVIEW_CHARS,
   OVERLAY_ERROR_FADE_MS,
@@ -23,7 +25,7 @@ import { trimSilence } from '../audio/trim.js';
 import { encodeForUpload } from '../audio/encode.js';
 import { samplesToMs } from '../audio/wav.js';
 import { getFocusedAppName } from '../inject/focused-app.js';
-import { pasteText } from '../inject/paste.js';
+import { copyText, pasteText } from '../inject/paste.js';
 import { log } from '../log.js';
 import { getMicDeviceId } from '../store.js';
 import type { OverlayWindow } from '../windows/overlay.js';
@@ -83,6 +85,8 @@ export interface ControllerDeps {
   waitForModifiersReleased: (timeoutMs: number) => Promise<boolean>;
   /** Changes whenever the user types or clicks — see HotkeyListener. */
   getInputActivity: () => number;
+  /** The last transcript appeared or was cleared (the tray's Copy item). */
+  onLastTranscriptChanged?: (available: boolean) => void;
 }
 
 /** What a finished dictation has to show on the overlay. */
@@ -130,8 +134,46 @@ export class RecordingController {
   /** The last successful paste, to tell whether the next one continues it. */
   private lastPaste: { text: string; inputActivity: number; at: number } | null = null;
 
+  /**
+   * The newest transcript, for the overlay's Copy button and the tray. Memory
+   * only, and cleared on sign-out, so it never outlives the session.
+   */
+  private lastTranscript: string | null = null;
+
   constructor(deps: ControllerDeps) {
     this.deps = deps;
+  }
+
+  hasLastTranscript(): boolean {
+    return this.lastTranscript !== null;
+  }
+
+  /**
+   * Put the last transcript on the clipboard. When nothing else is on the
+   * overlay, it confirms with a short "Copied" chip. Returns false when there
+   * is nothing to copy.
+   */
+  copyLastTranscript(): boolean {
+    if (this.lastTranscript === null) return false;
+    copyText(this.lastTranscript);
+    log.info('[rec] last transcript copied');
+    if (!this.listening && !this.hasPendingWork()) {
+      this.setOverlay({ kind: 'copy', copied: true });
+      this.deps.overlay.hideAfter(OVERLAY_COPIED_MS);
+    }
+    return true;
+  }
+
+  clearLastTranscript(): void {
+    if (this.lastTranscript === null) return;
+    this.lastTranscript = null;
+    this.deps.onLastTranscriptChanged?.(false);
+  }
+
+  private rememberTranscript(text: string): void {
+    const first = this.lastTranscript === null;
+    this.lastTranscript = text;
+    if (first) this.deps.onLastTranscriptChanged?.(true);
   }
 
   /** Only a live recording counts — the hotkey must not "stop" an upload. */
@@ -398,6 +440,8 @@ export class RecordingController {
       }
     } while (this.listening);
 
+    // Here, in paste order, so "last" means the last one pasted.
+    if (response.cleaned.trim() !== '') this.rememberTranscript(response.cleaned);
     const text = this.joinWithPrevious(response.cleaned);
     // Diagnostics only, never awaited: which app had focus when the keystroke
     // went out tells a paste that landed elsewhere from one that was never sent.
@@ -480,8 +524,13 @@ export class RecordingController {
       return;
     }
 
+    // The pill shrinks into a Copy chip for a few seconds before it goes, for
+    // a paste that landed in the wrong place (or nowhere).
     this.setOverlay(result);
-    this.deps.overlay.hideAfter(result.pasted ? OVERLAY_DONE_FADE_MS : OVERLAY_FALLBACK_FADE_MS);
+    this.deps.overlay.hideAfter(result.pasted ? OVERLAY_DONE_FADE_MS : OVERLAY_FALLBACK_FADE_MS, {
+      state: { kind: 'copy', copied: false },
+      ms: OVERLAY_COPY_CHIP_MS,
+    });
   }
 
   /** Nothing new to report: 'processing' while work remains, else hidden. */

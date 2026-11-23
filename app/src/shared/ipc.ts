@@ -215,6 +215,10 @@ export interface IpcSendMap {
   'overlay:audio-empty': { generation: number };
   /** Overlay: Escape pressed, or the 10-minute cap hit. */
   'overlay:stop-requested': { reason: 'escape' | 'max-duration' };
+  /** Overlay: the copy button was clicked — copy the last transcript. */
+  'overlay:copy': void;
+  /** Overlay: the mouse entered or left it; it must not vanish under the cursor. */
+  'overlay:hover': { hovering: boolean };
   /** Dashboard: mounted and ready for broadcasts. */
   'renderer:ready': void;
 }
@@ -310,6 +314,8 @@ export const SEND_CHANNELS: readonly IpcSendChannel[] = [
   'overlay:mic-denied',
   'overlay:audio-empty',
   'overlay:stop-requested',
+  'overlay:copy',
+  'overlay:hover',
   'renderer:ready',
 ];
 

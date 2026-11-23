@@ -9,6 +9,7 @@ interface Paste {
 }
 
 const pastes: Paste[] = [];
+const copies: string[] = [];
 let controller: { isListening(): boolean } | null = null;
 let keysHeld = false;
 let inputActivity = 0;
@@ -19,6 +20,9 @@ mock.module(new URL('../src/main/inject/paste.ts', import.meta.url).href, {
     pasteText: async (text: string) => {
       pastes.push({ text, listening: controller?.isListening() ?? false, keysHeld });
       return { pasted: true, method: 'uiohook', focusedApp: null };
+    },
+    copyText: (text: string) => {
+      copies.push(text);
     },
   },
 });
@@ -47,13 +51,24 @@ type Reply = { resolve: (value: unknown) => void; reject: (error: unknown) => vo
  */
 function setup() {
   pastes.length = 0;
+  copies.length = 0;
   keysHeld = false;
   const overlay: string[] = [];
+  const states: Array<{ kind: string; copied?: boolean }> = [];
+  const hides: Array<{ ms: number; next?: { state: { kind: string; copied?: boolean }; ms: number } }> = [];
+  const transcriptEvents: boolean[] = [];
   const pending = new Map<string, Reply>();
   let releaseWaiters: Array<(released: boolean) => void> = [];
 
   const ctrl = new RecordingController({
-    overlay: { setState: (s: { kind: string }) => overlay.push(s.kind), hideAfter: () => undefined } as never,
+    overlay: {
+      setState: (s: { kind: string }) => {
+        overlay.push(s.kind);
+        states.push(s);
+      },
+      hideAfter: (ms: number, next?: (typeof hides)[number]['next']) => hides.push({ ms, next }),
+    } as never,
+    onLastTranscriptChanged: (available: boolean) => transcriptEvents.push(available),
     api: {
       request: (_path: string, options: { formData: FormData; timeoutMs?: number }) =>
         new Promise((resolve, reject) => {
@@ -102,7 +117,19 @@ function setup() {
     ctrl.onAudioReady(audio(generation, ms));
   };
 
-  return { ctrl, overlay, audio, reply, fail, discard, releaseKeys, dictate };
+  return {
+    ctrl,
+    overlay,
+    states,
+    hides,
+    transcriptEvents,
+    audio,
+    reply,
+    fail,
+    discard,
+    releaseKeys,
+    dictate,
+  };
 }
 
 const texts = (): string[] => pastes.map((paste) => paste.text.trim());
@@ -275,4 +302,67 @@ test('a 3-minute dictation is uploaded with more than the 90 s base timeout', as
   t.reply(200_000, 'long one');
   await tick(10);
   assert.deepEqual(texts(), ['long one']);
+});
+
+test('a pasted dictation shows the pill for 3 s, then the Copy chip for 3 s', async () => {
+  const t = setup();
+  t.dictate(1, 3001);
+  t.reply(3001, 'hello world');
+  await tick(10);
+  assert.equal(t.overlay.at(-1), 'done');
+  assert.deepEqual(t.hides.at(-1), {
+    ms: 3_000,
+    next: { state: { kind: 'copy', copied: false }, ms: 3_000 },
+  });
+});
+
+test('Copy puts the full last transcript on the clipboard and confirms', async () => {
+  const t = setup();
+  assert.equal(t.ctrl.copyLastTranscript(), false, 'nothing to copy before any dictation');
+  assert.deepEqual(copies, []);
+
+  const long = 'a transcript far longer than the forty characters the pill previews';
+  t.dictate(1, 3002);
+  t.reply(3002, long);
+  await tick(10);
+
+  assert.equal(t.ctrl.copyLastTranscript(), true);
+  assert.deepEqual(copies, [long], 'the whole text, not the overlay preview');
+  assert.deepEqual(t.states.at(-1), { kind: 'copy', copied: true });
+  assert.deepEqual(t.hides.at(-1), { ms: 1_200, next: undefined });
+});
+
+test('"last" is the last one pasted, and the tray hears about it once', async () => {
+  const t = setup();
+  t.dictate(1, 3003);
+  t.dictate(2, 3004);
+  t.reply(3004, 'second');
+  t.reply(3003, 'first');
+  await tick(10);
+  t.ctrl.copyLastTranscript();
+  assert.deepEqual(copies, ['second']);
+  assert.deepEqual(t.transcriptEvents, [true]);
+});
+
+test('Copy during a live recording copies but leaves the overlay alone', async () => {
+  const t = setup();
+  t.dictate(1, 3005);
+  t.reply(3005, 'first');
+  await tick(10);
+  t.ctrl.startRecording('hotkey');
+  t.ctrl.copyLastTranscript();
+  assert.deepEqual(copies, ['first']);
+  assert.equal(t.overlay.at(-1), 'listening');
+  t.ctrl.cancelRecording('test');
+});
+
+test('sign-out forgets the last transcript', async () => {
+  const t = setup();
+  t.dictate(1, 3006);
+  t.reply(3006, 'private');
+  await tick(10);
+  t.ctrl.clearLastTranscript();
+  assert.equal(t.ctrl.copyLastTranscript(), false);
+  assert.deepEqual(copies, []);
+  assert.deepEqual(t.transcriptEvents, [true, false]);
 });

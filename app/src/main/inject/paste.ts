@@ -192,6 +192,20 @@ export async function pasteText(text: string): Promise<PasteOutcome> {
   return { pasted: true, method, focusedApp: null };
 }
 
+/**
+ * An explicit copy (the overlay's Copy button, the tray, History). The user
+ * asked for this text on the clipboard, so a pending restore must not put the
+ * old clipboard back over it a few seconds later — the restore only checks
+ * that the clipboard still holds our text, and a re-copied transcript does.
+ */
+export function copyText(text: string): void {
+  if (pending !== null) {
+    if (pending.timer !== null) clearTimeout(pending.timer);
+    pending = null;
+  }
+  writeText(text);
+}
+
 /** Put the user's clipboard back now — called on quit so we never keep it. */
 export function flushClipboardRestore(): void {
   const entry = pending;

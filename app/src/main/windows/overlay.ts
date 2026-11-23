@@ -7,11 +7,21 @@ import type { OverlayPosition } from '@whisper/shared';
 
 import {
   OVERLAY_BOTTOM_MARGIN,
+  OVERLAY_CHIP_HEIGHT,
+  OVERLAY_CHIP_WIDTH,
   OVERLAY_HEIGHT,
+  OVERLAY_HOVER_GRACE_MS,
   OVERLAY_SIDE_MARGIN,
   OVERLAY_WIDTH,
+  isChipState,
   type OverlayState,
 } from '../../shared/overlay.js';
+
+/** What a hideAfter() timer turns into: the next state for a while, then idle. */
+export interface OverlayNextStep {
+  state: OverlayState;
+  ms: number;
+}
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -32,6 +42,10 @@ export class OverlayWindow {
   private state: OverlayState = { kind: 'idle' };
   private hideTimer: NodeJS.Timeout | null = null;
   private disposed = false;
+  /** The mouse is over the overlay: timed steps wait until it leaves. */
+  private hovered = false;
+  /** A timed step that came due while hovered, run once the mouse leaves. */
+  private dueWhileHovered: (() => void) | null = null;
 
   /**
    * Fired when the overlay's renderer process dies. The recording controller
@@ -119,10 +133,7 @@ export class OverlayWindow {
 
   setState(state: OverlayState): void {
     this.state = state;
-    if (this.hideTimer !== null) {
-      clearTimeout(this.hideTimer);
-      this.hideTimer = null;
-    }
+    this.clearTimer();
 
     if (state.kind === 'idle') {
       // The renderer must see it too: idle straight from listening is a
@@ -141,14 +152,53 @@ export class OverlayWindow {
     return this.state;
   }
 
-  /** Lets the fade-out animation in the renderer finish before hiding. */
-  hideAfter(ms: number): void {
-    if (this.hideTimer !== null) clearTimeout(this.hideTimer);
+  /**
+   * Hide after `ms` — or, with `next`, switch to that state for `next.ms`
+   * first (the done pill shrinking into the copy chip). While the mouse is
+   * over the overlay a due step waits, so it never vanishes under the cursor.
+   */
+  hideAfter(ms: number, next?: OverlayNextStep): void {
+    this.clearTimer();
+    const step = (): void => {
+      if (next !== undefined) {
+        this.setState(next.state);
+        this.hideAfter(next.ms);
+        return;
+      }
+      this.state = { kind: 'idle' };
+      this.window?.webContents.send('overlay:state', this.state);
+      this.hide();
+    };
     this.hideTimer = setTimeout(() => {
       this.hideTimer = null;
-      this.state = { kind: 'idle' };
-      this.hide();
+      if (this.hovered) {
+        this.dueWhileHovered = step;
+        return;
+      }
+      step();
     }, ms);
+  }
+
+  /** From the renderer's mouseenter / mouseleave. */
+  setHovered(hovered: boolean): void {
+    this.hovered = hovered;
+    if (hovered || this.dueWhileHovered === null) return;
+    const step = this.dueWhileHovered;
+    this.dueWhileHovered = null;
+    this.hideTimer = setTimeout(() => {
+      this.hideTimer = null;
+      if (this.hovered) {
+        this.dueWhileHovered = step;
+        return;
+      }
+      step();
+    }, OVERLAY_HOVER_GRACE_MS);
+  }
+
+  private clearTimer(): void {
+    if (this.hideTimer !== null) clearTimeout(this.hideTimer);
+    this.hideTimer = null;
+    this.dueWhileHovered = null;
   }
 
   send(channel: string, payload: unknown): void {
@@ -180,19 +230,31 @@ export class OverlayWindow {
   }
 
   private hide(): void {
+    // A hidden window gets no mouseleave; a stale "hovered" would hold every
+    // later timed step forever.
+    this.hovered = false;
     this.window?.hide();
   }
 
   private reposition(): void {
     if (this.window === null) return;
 
+    // The chip gets a window of its own size: the transparent rest of a
+    // full-size window would still swallow clicks meant for the app below.
+    const chip = isChipState(this.state);
+    const width = chip ? OVERLAY_CHIP_WIDTH : OVERLAY_WIDTH;
+    const height = chip ? OVERLAY_CHIP_HEIGHT : OVERLAY_HEIGHT;
+
     // The display under the cursor, not the primary one — dictation happens
-    // where the user is working.
-    const cursor = screen.getCursorScreenPoint();
-    const display = screen.getDisplayNearestPoint(cursor);
+    // where the user is working. Already on screen (pill shrinking to chip),
+    // it stays on the display it is on.
+    const display = this.window.isVisible()
+      ? screen.getDisplayMatching(this.window.getBounds())
+      : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const area = display.workArea;
 
-    const y = area.y + area.height - OVERLAY_HEIGHT - OVERLAY_BOTTOM_MARGIN;
+    // The chip is centred on the line the pill sat on.
+    const y = area.y + area.height - height - OVERLAY_BOTTOM_MARGIN - (OVERLAY_HEIGHT - height) / 2;
     let x: number;
 
     switch (this.position) {
@@ -200,14 +262,14 @@ export class OverlayWindow {
         x = area.x + OVERLAY_SIDE_MARGIN;
         break;
       case 'bottom-right':
-        x = area.x + area.width - OVERLAY_WIDTH - OVERLAY_SIDE_MARGIN;
+        x = area.x + area.width - width - OVERLAY_SIDE_MARGIN;
         break;
       case 'bottom-center':
       default:
-        x = area.x + Math.round((area.width - OVERLAY_WIDTH) / 2);
+        x = area.x + Math.round((area.width - width) / 2);
         break;
     }
 
-    this.window.setBounds({ x, y, width: OVERLAY_WIDTH, height: OVERLAY_HEIGHT });
+    this.window.setBounds({ x, y: Math.round(y), width, height });
   }
 }
