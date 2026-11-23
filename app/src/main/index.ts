@@ -14,7 +14,7 @@ import { registerIpc, syncSettingsFromServer, type AppContext } from './ipc.js';
 import { log } from './log.js';
 import { enableStartAtLoginOnce } from './login-item.js';
 import { RecordingController } from './recording/controller.js';
-import { getServerUrl, getStoredSettings } from './store.js';
+import { getServerUrl, getStoredSettings, retireServerUrl } from './store.js';
 import { initTheme } from './theme.js';
 import { Updates } from './updates.js';
 import { DashboardWindow } from './windows/dashboard.js';
@@ -36,6 +36,13 @@ const envApiUrl = import.meta.env.VITE_API_URL;
 const defaultApiUrl =
   envApiUrl !== undefined && envApiUrl !== '' ? envApiUrl : 'http://localhost:8080';
 const getApiUrl = (): string => getServerUrl() ?? defaultApiUrl;
+
+/**
+ * Whisper 0.3 moves everyone from the Azure server to the Groq one
+ * (whisper-v2). The old server keeps running for old installs and as a way
+ * back. Same database and secrets, so the move keeps people signed in.
+ */
+const RETIRED_API_URL = 'https://whisper.agent.omadligrouphq.com';
 const apiUrlMissing = (envApiUrl === undefined || envApiUrl === '') && !DEV;
 
 // A tray app must be a singleton: a second launch would register a second
@@ -51,6 +58,12 @@ async function main(): Promise<void> {
 
   // Before any window exists, so the first paint is already in the right theme.
   initTheme();
+
+  // Before the API client exists, so the very first request goes to the new
+  // server. Only in builds whose own default is a different server.
+  if (!DEV && defaultApiUrl.replace(/\/+$/u, '') !== RETIRED_API_URL && retireServerUrl(RETIRED_API_URL)) {
+    log.info(`[boot] moved from ${RETIRED_API_URL} to ${defaultApiUrl}`);
+  }
 
   const dashboard = new DashboardWindow();
   const overlay = new OverlayWindow(getStoredSettings().overlayPosition);

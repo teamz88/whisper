@@ -35,6 +35,8 @@ interface StoreSchema {
   serverUrl: string | null;
   /** Client-side only: a look preference for this computer, not the account. */
   theme: ThemePreference;
+  /** Server addresses already moved off once (see retireServerUrl). */
+  retiredServerUrls: string[];
 }
 
 const store = new Store<StoreSchema>({
@@ -47,6 +49,7 @@ const store = new Store<StoreSchema>({
     loginItemSet: false,
     serverUrl: null,
     theme: 'system',
+    retiredServerUrls: [],
   },
 });
 
@@ -111,6 +114,26 @@ export function getServerUrl(): string | null {
 
 export function setServerUrl(url: string | null): void {
   store.set('serverUrl', url);
+}
+
+const sameServer = (a: string, b: string): boolean =>
+  a.trim().replace(/\/+$/u, '').toLowerCase() === b.trim().replace(/\/+$/u, '').toLowerCase();
+
+/**
+ * Moves people off a server this build replaces: a saved address equal to
+ * `url` is cleared once, so the built-in default takes over. Once only — a
+ * user who types the old address back afterwards keeps it. Returns true when
+ * it moved this user.
+ */
+export function retireServerUrl(url: string): boolean {
+  const retired = store.get('retiredServerUrls');
+  if (retired.some((done) => sameServer(done, url))) return false;
+  store.set('retiredServerUrls', [...retired, url]);
+
+  const saved = store.get('serverUrl');
+  if (saved === null || !sameServer(saved, url)) return false;
+  store.set('serverUrl', null);
+  return true;
 }
 
 /** Sign-out wipes credentials but keeps device-local preferences. */
