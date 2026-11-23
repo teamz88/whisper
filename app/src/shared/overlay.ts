@@ -41,9 +41,14 @@ export const OVERLAY_SIDE_MARGIN = 24;
 /** After this long listening, the timer is replaced by the "Esc" hint. */
 export const OVERLAY_ESC_HINT_AFTER_MS = 5_000;
 
-/** The copy chip's geometry; same bottom edge and side as the pill. */
-export const OVERLAY_CHIP_WIDTH = 92;
-export const OVERLAY_CHIP_HEIGHT = 36;
+/**
+ * The copy chip: a round icon button, centred on the pill's line. Hovering it
+ * widens it to show the word "Copy" — main resizes the window to match, so
+ * the chip stays tiny (and clicks around it reach the app below) otherwise.
+ */
+export const OVERLAY_CHIP_WIDTH = 32;
+export const OVERLAY_CHIP_HEIGHT = 32;
+export const OVERLAY_CHIP_HOVER_WIDTH = 76;
 
 export const OVERLAY_DONE_FADE_MS = 3_000;
 export const OVERLAY_ERROR_FADE_MS = 4_000;

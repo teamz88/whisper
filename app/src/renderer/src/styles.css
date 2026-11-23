@@ -230,15 +230,15 @@ body.overlay-body {
   animation: whisper-fade-in 0.16s ease-out;
 }
 
-/* The done pill "shrinking" into the copy chip. */
+/* The done pill shrinking away into the small round copy chip. */
 @keyframes whisper-chip-in {
   from {
     opacity: 0;
-    transform: scaleX(1.6);
+    transform: scale(0.6);
   }
   to {
     opacity: 1;
-    transform: scaleX(1);
+    transform: scale(1);
   }
 }
 

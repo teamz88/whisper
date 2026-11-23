@@ -127,7 +127,10 @@ export function OverlayApp(): ReactNode {
 
 const copyLast = (): void => bridge.send('overlay:copy');
 
-/** The small pill the done state shrinks into: one click copies the transcript. */
+/**
+ * What the done pill shrinks into: a round copy icon. Hovering widens it to
+ * "Copy" (main widens the window in step); after a click it is a green tick.
+ */
 function CopyChip({
   copied,
   onMouseEnter,
@@ -137,21 +140,31 @@ function CopyChip({
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }): ReactNode {
+  const [hovered, setHovered] = useState(false);
+  const showLabel = hovered && !copied;
+
   return (
     <button
       type="button"
       onClick={copyLast}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={() => {
+        setHovered(true);
+        onMouseEnter();
+      }}
+      onMouseLeave={() => {
+        setHovered(false);
+        onMouseLeave();
+      }}
       disabled={copied}
       aria-label="Copy last transcript"
       className={cn(
-        'flex h-9 w-[92px] items-center justify-center gap-1.5 rounded-full border border-line bg-raised/95 text-[13px] font-medium shadow-lg backdrop-blur animate-chip-in',
-        copied ? 'text-success' : 'text-ink hover:bg-accent-soft hover:text-accent-ink',
+        'flex h-8 items-center justify-center gap-1 rounded-full border border-line bg-raised/95 text-[12px] font-medium shadow-md backdrop-blur animate-chip-in',
+        showLabel ? 'w-[76px] bg-accent-soft text-accent-ink' : 'w-8',
+        copied ? 'text-success' : !showLabel && 'text-ink-soft',
       )}
     >
-      {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-[15px]" />}
+      {showLabel ? 'Copy' : null}
     </button>
   );
 }

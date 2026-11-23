@@ -8,6 +8,7 @@ import type { OverlayPosition } from '@whisper/shared';
 import {
   OVERLAY_BOTTOM_MARGIN,
   OVERLAY_CHIP_HEIGHT,
+  OVERLAY_CHIP_HOVER_WIDTH,
   OVERLAY_CHIP_WIDTH,
   OVERLAY_HEIGHT,
   OVERLAY_HOVER_GRACE_MS,
@@ -182,7 +183,10 @@ export class OverlayWindow {
 
   /** From the renderer's mouseenter / mouseleave. */
   setHovered(hovered: boolean): void {
+    const changed = this.hovered !== hovered;
     this.hovered = hovered;
+    // The chip widens under the cursor to show its label.
+    if (changed && isChipState(this.state) && this.window?.isVisible() === true) this.reposition();
     if (hovered || this.dueWhileHovered === null) return;
     const step = this.dueWhileHovered;
     this.dueWhileHovered = null;
@@ -243,7 +247,8 @@ export class OverlayWindow {
     // The chip gets a window of its own size: the transparent rest of a
     // full-size window would still swallow clicks meant for the app below.
     const chip = isChipState(this.state);
-    const width = chip ? OVERLAY_CHIP_WIDTH : OVERLAY_WIDTH;
+    const labelShown = this.state.kind === 'copy' && !this.state.copied && this.hovered;
+    const width = chip ? (labelShown ? OVERLAY_CHIP_HOVER_WIDTH : OVERLAY_CHIP_WIDTH) : OVERLAY_WIDTH;
     const height = chip ? OVERLAY_CHIP_HEIGHT : OVERLAY_HEIGHT;
 
     // The display under the cursor, not the primary one — dictation happens
