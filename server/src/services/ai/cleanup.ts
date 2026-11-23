@@ -5,7 +5,8 @@ import type { LanguageCode, WritingStyle } from '@whisper/shared';
 
 import { describeApiError, isTransientError } from './client.js';
 import {
-  buildCleanupSystemPrompt,
+  buildCleanupMessages,
+  checkFaithful,
   looksLikeRefusal,
   stripPreamble,
   stripWrapping,
@@ -36,19 +37,15 @@ export async function cleanupTranscript(
   input: CleanupInput,
   logger: FastifyBaseLogger,
 ): Promise<CleanupResult> {
-  const system = buildCleanupSystemPrompt({
-    style: input.style,
-    language: input.language,
-    customVocabulary: input.customVocabulary,
-  });
+  const messages = buildCleanupMessages(
+    { style: input.style, language: input.language, customVocabulary: input.customVocabulary },
+    input.raw,
+  );
 
   const attempt = async (): Promise<{ text: string; truncated: boolean }> => {
     const completion = await client.chat.completions.create({
       model: input.model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: input.raw },
-      ],
+      messages,
       temperature: 0.2,
       // Runaway guard, not a budget. The floor is deliberately high: the
       // default cleanup model (gpt-oss-120b) is a reasoning model whose
@@ -106,6 +103,13 @@ export async function cleanupTranscript(
   if (looksLikeRefusal(text, input.raw)) {
     logger.warn(`[dictate] cleanup returned a refusal, using raw transcript: ${text.slice(0, 80)}`);
     return { kind: 'fallback', reason: 'model refused' };
+  }
+
+  // The model answered the dictation or cut it down: paste what was said.
+  const verdict = checkFaithful(text, input.raw, input.style);
+  if (!verdict.ok) {
+    logger.warn(`[dictate] cleanup rejected, using raw transcript: ${verdict.reason}`);
+    return { kind: 'fallback', reason: verdict.reason };
   }
 
   return { kind: 'cleaned', text };
