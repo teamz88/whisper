@@ -157,7 +157,8 @@ export class OverlayWindow {
    * first (the done pill shrinking into the copy chip). While the mouse is
    * over the overlay a due step waits, so it never vanishes under the cursor.
    */
-  hideAfter(ms: number, next?: OverlayNextStep): void {
+  hideAfter(ms: number, next?: OverlayNextStep, options: { holdWhileHovered?: boolean } = {}): void {
+    const holdWhileHovered = options.holdWhileHovered ?? true;
     this.clearTimer();
     const step = (): void => {
       if (next !== undefined) {
@@ -171,7 +172,7 @@ export class OverlayWindow {
     };
     this.hideTimer = setTimeout(() => {
       this.hideTimer = null;
-      if (this.hovered) {
+      if (this.hovered && holdWhileHovered) {
         this.dueWhileHovered = step;
         return;
       }

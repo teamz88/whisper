@@ -50,7 +50,7 @@ export const OVERLAY_ERROR_FADE_MS = 4_000;
 /** How long the copy chip stays after the done pill. */
 export const OVERLAY_COPY_CHIP_MS = 3_000;
 /** How long "Copied" shows after a click. */
-export const OVERLAY_COPIED_MS = 1_200;
+export const OVERLAY_COPIED_MS = 700;
 /** Leaving the overlay with the mouse: this long before an expired step runs. */
 export const OVERLAY_HOVER_GRACE_MS = 600;
 

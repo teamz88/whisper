@@ -329,7 +329,7 @@ test('Copy puts the full last transcript on the clipboard and confirms', async (
   assert.equal(t.ctrl.copyLastTranscript(), true);
   assert.deepEqual(copies, [long], 'the whole text, not the overlay preview');
   assert.deepEqual(t.states.at(-1), { kind: 'copy', copied: true });
-  assert.deepEqual(t.hides.at(-1), { ms: 1_200, next: undefined });
+  assert.deepEqual(t.hides.at(-1), { ms: 700, next: undefined });
 });
 
 test('"last" is the last one pasted, and the tray hears about it once', async () => {

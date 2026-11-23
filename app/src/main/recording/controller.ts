@@ -159,7 +159,9 @@ export class RecordingController {
     log.info('[rec] last transcript copied');
     if (!this.listening && !this.hasPendingWork()) {
       this.setOverlay({ kind: 'copy', copied: true });
-      this.deps.overlay.hideAfter(OVERLAY_COPIED_MS);
+      // The cursor is still on the button that was just clicked; "Copied" is
+      // a confirmation, not something to reach for, so it does not wait.
+      this.deps.overlay.hideAfter(OVERLAY_COPIED_MS, undefined, { holdWhileHovered: false });
     }
     return true;
   }
