@@ -10,7 +10,8 @@ export interface TranscribeInput {
   audio: Buffer;
   filename: string;
   mimetype: string;
-  language: LanguageCode;
+  /** Null sends no language parameter (Azure rejects some codes, e.g. 'uz'). */
+  language: LanguageCode | null;
   model: string;
   /** The user's custom vocabulary, already trimmed to the prompt window. */
   prompt?: string | undefined;
@@ -35,7 +36,7 @@ export async function transcribe(
     const result = await client.audio.transcriptions.create({
       file,
       model: input.model,
-      language: input.language,
+      ...(input.language === null ? {} : { language: input.language }),
       // Literal, not a variable: the SDK picks the return type from this by
       // overload, and a `string` collapses it to the widest one.
       response_format: 'json',
