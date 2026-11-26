@@ -62,6 +62,15 @@ const REPRESS_GAP_MS = 1400;
  */
 const CHORD_CANCEL_WINDOW_MS = 1000;
 
+/**
+ * Releasing the shortcut stops the recording only if the key STAYS up this
+ * long. Some keyboards (and Windows itself, with Ctrl+Win) report a held key
+ * as released and pressed again within a few tens of milliseconds; acting on
+ * that flicker cut dictations in half, and the instant restart lost the words
+ * spoken while the mic reopened.
+ */
+export const RELEASE_FLICKER_MS = 150;
+
 export class HotkeyListener {
   private readonly callbacks: HotkeyCallbacks;
 
@@ -84,6 +93,9 @@ export class HotkeyListener {
    * moment the extra key comes up while the combo is still held.
    */
   private chordBlocked = false;
+
+  /** A shortcut key just went up; the stop fires unless it comes back down first. */
+  private pendingStop: { keycode: number; releasedAt: number; timer: NodeJS.Timeout } | null = null;
 
   /** Last keydown per keycode, for the auto-repeat vs re-press distinction. */
   private lastKeydownAt = new Map<number, number>();
@@ -112,6 +124,7 @@ export class HotkeyListener {
   setHotkey(hotkey: string): void {
     this.parsed = parseHotkey(hotkey);
     this.compile();
+    this.clearPendingStop();
     this.holdActive = false;
     this.chordBlocked = false;
     this.toggleKeyDown = false;
@@ -254,6 +267,7 @@ export class HotkeyListener {
     // sometimes swallows the Win-key release when chorded and the user needs a
     // way out that does not depend on the combo at all.
     if (event.keycode === ESCAPE_KEYCODE) {
+      this.clearPendingStop();
       if (this.callbacks.isListening()) this.callbacks.onStop('escape');
       return;
     }
@@ -267,6 +281,19 @@ export class HotkeyListener {
 
   private handleHoldKeydown(event: UiohookKeyboardEvent, now: number, previousDownAt: number): void {
     const state = readModifierState(event);
+
+    // The released key came straight back with the shortcut still held: a
+    // flicker, not a release. The recording carries on untouched.
+    const pending = this.pendingStop;
+    if (
+      pending !== null &&
+      event.keycode === pending.keycode &&
+      modifiersSatisfied(state, this.parsed.modifiers, { exact: false })
+    ) {
+      this.clearPendingStop();
+      log.info(`[hotkey] ignored a ${now - pending.releasedAt}ms release flicker (keycode ${event.keycode})`);
+      return;
+    }
 
     // Read from the event flags, not only from our keyup: an eaten keyup must
     // not leave the combo blocked forever.
@@ -321,6 +348,8 @@ export class HotkeyListener {
     // it reaches the hook after the suppression window.
     if (needsMenuGuard(this.parsed) && MODIFIER_KEYCODES.Ctrl.includes(keycode)) return;
 
+    log.info(`[hotkey] keycode ${keycode} right after the shortcut: treated as another shortcut`);
+    this.clearPendingStop();
     this.holdActive = false;
     this.chordBlocked = true;
     this.callbacks.onCancel();
@@ -374,13 +403,28 @@ export class HotkeyListener {
     // Ctrl (say, Ctrl+C in another window) would kill a recording the user
     // started from the dashboard button.
     if (!this.callbacks.isListening()) {
+      this.clearPendingStop();
       this.holdActive = false;
       return;
     }
 
-    if (this.holdActive && this.requiredKeycodes.has(event.keycode)) {
-      this.holdActive = false;
-      this.callbacks.onStop('hold');
+    if (this.holdActive && this.requiredKeycodes.has(event.keycode) && this.pendingStop === null) {
+      this.pendingStop = {
+        keycode: event.keycode,
+        releasedAt: Date.now(),
+        timer: setTimeout(() => {
+          this.pendingStop = null;
+          if (!this.holdActive || !this.callbacks.isListening()) return;
+          this.holdActive = false;
+          this.callbacks.onStop('hold');
+        }, RELEASE_FLICKER_MS),
+      };
     }
+  }
+
+  private clearPendingStop(): void {
+    if (this.pendingStop === null) return;
+    clearTimeout(this.pendingStop.timer);
+    this.pendingStop = null;
   }
 }

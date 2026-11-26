@@ -43,6 +43,15 @@ const OVERLAY_FALLBACK_FADE_MS = 5_000;
 const KEY_RELEASE_GRACE_MS = 600;
 
 /**
+ * How long a stopped recording may keep its audio owed before the overlay
+ * stops saying "Processing" for it. Real audio arrives well under a second
+ * after the stop; one that never arrives (a recording so short the overlay
+ * never opened the mic) would otherwise hold "Processing" up forever. Audio
+ * that does turn up later is still transcribed and pasted.
+ */
+export const AUDIO_WAIT_MS = 2_000;
+
+/**
  * Pastes wait for every earlier dictation, so one hung upload would hold back
  * all the ones after it, so the limit starts at 90 s and grows with the length
  * of the recording (see dictateTimeoutMs below).
@@ -119,6 +128,12 @@ export class RecordingController {
 
   /** Recordings that have stopped and whose audio the overlay still owes. */
   private readonly awaitingAudio = new Set<number>();
+
+  /** What this controller last put on the overlay. */
+  private overlayKind: OverlayState['kind'] = 'idle';
+
+  /** Owed audio stopped being waited on (AUDIO_WAIT_MS); still accepted if it arrives. */
+  private readonly overdueAudio = new Set<number>();
 
   /** Dictations uploading or waiting for their turn to paste. */
   private inFlight = 0;
@@ -220,7 +235,7 @@ export class RecordingController {
   stopRecording(reason: string): void {
     if (!this.listening) return;
 
-    this.awaitingAudio.add(this.generation);
+    this.awaitAudio(this.generation);
     this.endListening();
     this.setOverlay({ kind: 'processing' });
     this.broadcastState();
@@ -267,7 +282,9 @@ export class RecordingController {
       this.broadcastState();
     }
 
-    if (!this.awaitingAudio.delete(generation)) {
+    if (this.overdueAudio.delete(generation)) {
+      log.info(`[rec] #${generation} audio arrived late, processing it anyway`);
+    } else if (!this.awaitingAudio.delete(generation)) {
       log.warn(`[rec] #${generation} stale audio dropped (cancelled or superseded recording)`);
       return;
     }
@@ -282,6 +299,8 @@ export class RecordingController {
     if (generation === UNKNOWN_GENERATION) {
       if (this.listening || this.awaitingAudio.size === 0) return;
       this.awaitingAudio.clear();
+    } else if (this.overdueAudio.delete(generation)) {
+      return; // already given up on; the overlay has moved on
     } else if (!this.awaitingAudio.delete(generation)) {
       return;
     }
@@ -545,6 +564,24 @@ export class RecordingController {
     return this.awaitingAudio.size > 0 || this.inFlight > 0;
   }
 
+  /** Owe audio for `generation`, but not forever (see AUDIO_WAIT_MS). */
+  private awaitAudio(generation: number): void {
+    this.awaitingAudio.add(generation);
+    setTimeout(() => {
+      if (!this.awaitingAudio.delete(generation)) return;
+      log.warn(`[rec] #${generation} no audio after ${AUDIO_WAIT_MS}ms, not waiting any longer`);
+      this.overdueAudio.add(generation);
+      // Bounded: each entry is one lost flicker recording.
+      if (this.overdueAudio.size > 50) {
+        const oldest = this.overdueAudio.values().next().value;
+        if (oldest !== undefined) this.overdueAudio.delete(oldest);
+      }
+      // Only a "Processing" that was waiting on this; an error or result on
+      // screen keeps its own timing.
+      if (this.overlayKind === 'processing') this.settleOverlay();
+    }, AUDIO_WAIT_MS).unref?.();
+  }
+
   private endListening(): void {
     this.listening = false;
     this.source = null;
@@ -560,6 +597,7 @@ export class RecordingController {
   }
 
   private setOverlay(state: OverlayState): void {
+    this.overlayKind = state.kind;
     this.deps.overlay.setState(state);
   }
 

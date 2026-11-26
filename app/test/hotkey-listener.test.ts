@@ -21,7 +21,10 @@ mock.module('uiohook-napi', {
 // log.ts reads app.isReady(); outside Electron there is no app to ask.
 mock.module('electron', { namedExports: { app: { isReady: () => false } } });
 
-const { HotkeyListener } = await import('../src/main/hotkey/listener.ts');
+const { HotkeyListener, RELEASE_FLICKER_MS } = await import('../src/main/hotkey/listener.ts');
+
+/** A released shortcut stops the recording only once it has stayed up this long. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, RELEASE_FLICKER_MS + 30));
 const { suppressHotkeyFor } = await import('../src/main/hotkey/suppress.ts');
 
 // The listener reads Date.now() for its timing windows; the tests drive it.
@@ -80,12 +83,38 @@ function make(hotkey = 'HoldCtrlMeta') {
   return { calls, down, up, listener };
 }
 
-test('a plain Ctrl+Cmd hold starts and stops', () => {
+test('a plain Ctrl+Cmd hold starts and stops', async () => {
   const t = make();
   t.down(K.Ctrl, { ctrl: true });
   t.down(K.Meta, { ctrl: true, meta: true });
   t.up(K.Meta, { ctrl: true }, 3000);
   t.up(K.Ctrl, {});
+  assert.deepEqual(t.calls, ['start'], 'not before the key has stayed up');
+  await settle();
+  assert.deepEqual(t.calls, ['start', 'stop:hold']);
+});
+
+test('a key that flickers up and straight back down does not stop the recording', async () => {
+  const t = make();
+  t.down(K.Ctrl, { ctrl: true });
+  t.down(K.Meta, { ctrl: true, meta: true });
+  t.up(K.Meta, { ctrl: true }, 40); // the glitch: Win "released"...
+  t.down(K.Meta, { ctrl: true, meta: true }, 30); // ...and back 30 ms later
+  await settle();
+  assert.deepEqual(t.calls, ['start']);
+  t.up(K.Meta, { ctrl: true }, 3000); // the real release
+  await settle();
+  assert.deepEqual(t.calls, ['start', 'stop:hold']);
+});
+
+test('auto-repeat of the other key does not keep a released shortcut recording', async () => {
+  const t = make();
+  t.down(K.Ctrl, { ctrl: true });
+  t.down(K.Meta, { ctrl: true, meta: true });
+  t.up(K.Ctrl, { meta: true }, 300);
+  t.down(K.Meta, { meta: true }, 30); // Win still held, repeating
+  t.down(K.Meta, { meta: true }, 30);
+  await settle();
   assert.deepEqual(t.calls, ['start', 'stop:hold']);
 });
 
@@ -110,13 +139,14 @@ test('Ctrl+Cmd+Q cancels', () => {
   assert.deepEqual(t.calls, ['start', 'cancel']);
 });
 
-test('a stray key after the cancel window keeps the dictation', () => {
+test('a stray key after the cancel window keeps the dictation', async () => {
   const t = make();
   t.down(K.Ctrl, { ctrl: true });
   t.down(K.Meta, { ctrl: true, meta: true });
   t.down(K.Shift, { ctrl: true, meta: true, shift: true }, 3000);
   t.up(K.Shift, { ctrl: true, meta: true });
   t.up(K.Meta, { ctrl: true });
+  await settle();
   assert.deepEqual(t.calls, ['start', 'stop:hold']);
 });
 
@@ -131,7 +161,7 @@ test('auto-repeat after a cancel does not restart the recording', () => {
   assert.deepEqual(t.calls, ['start', 'cancel']);
 });
 
-test('the shortcut re-arms once released after a cancel', () => {
+test('the shortcut re-arms once released after a cancel', async () => {
   const t = make();
   t.down(K.Ctrl, { ctrl: true });
   t.down(K.Meta, { ctrl: true, meta: true });
@@ -142,6 +172,7 @@ test('the shortcut re-arms once released after a cancel', () => {
   t.down(K.Ctrl, { ctrl: true }, 500);
   t.down(K.Meta, { ctrl: true, meta: true });
   t.up(K.Meta, { ctrl: true }, 2000);
+  await settle();
   assert.deepEqual(t.calls, ['start', 'cancel', 'start', 'stop:hold']);
 });
 
@@ -164,11 +195,12 @@ test('Shift pressed first never starts', () => {
   assert.deepEqual(t.calls, []);
 });
 
-test("the menu guard's synthetic Ctrl does not cancel a bare Alt hold", () => {
+test("the menu guard's synthetic Ctrl does not cancel a bare Alt hold", async () => {
   const t = make('Alt');
   t.down(K.Alt, { alt: true });
   t.down(K.Ctrl, { alt: true, ctrl: true }, 120);
   t.up(K.Alt, {}, 2000);
+  await settle();
   assert.deepEqual(posted, [K.Ctrl]); // the guard's tap went out (to the fake hook)
   assert.deepEqual(t.calls, ['start', 'stop:hold']);
 });

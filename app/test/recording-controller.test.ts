@@ -34,7 +34,7 @@ mock.module(new URL('../src/main/store.ts', import.meta.url).href, {
 });
 mock.module('electron', { namedExports: { app: { isReady: () => false } } });
 
-const { RecordingController, dictateTimeoutMs } = await import(
+const { AUDIO_WAIT_MS, RecordingController, dictateTimeoutMs } = await import(
   '../src/main/recording/controller.ts'
 );
 
@@ -237,6 +237,46 @@ test('an empty capture leaves the overlay idle', () => {
   t.ctrl.stopRecording('hotkey');
   t.ctrl.onAudioEmpty(1);
   assert.equal(t.overlay.at(-1), 'idle');
+});
+
+/** A recording whose audio never comes back (one so short the overlay never opened the mic). */
+function lostRecording(t: ReturnType<typeof setup>): void {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    t.ctrl.startRecording('hotkey');
+    t.ctrl.stopRecording('hotkey');
+    assert.equal(t.overlay.at(-1), 'processing');
+    mock.timers.tick(AUDIO_WAIT_MS - 1);
+    assert.equal(t.overlay.at(-1), 'processing');
+    mock.timers.tick(1);
+  } finally {
+    mock.timers.reset();
+  }
+}
+
+test('Processing goes away when a recording never sends its audio', () => {
+  const t = setup();
+  lostRecording(t);
+  assert.equal(t.overlay.at(-1), 'idle');
+});
+
+test('a lost recording no longer keeps later results stuck on Processing', async () => {
+  const t = setup();
+  lostRecording(t);
+  t.dictate(2, 1101);
+  t.reply(1101, 'hello there');
+  await tick(10);
+  assert.equal(pastes.length, 1);
+  assert.equal(t.overlay.at(-1), 'done');
+});
+
+test('audio that turns up after the wait is still transcribed and pasted', async () => {
+  const t = setup();
+  lostRecording(t);
+  t.ctrl.onAudioReady(t.audio(1, 1102));
+  t.reply(1102, 'late words');
+  await tick(10);
+  assert.deepEqual(pastes.map((paste) => paste.text), ['late words']);
 });
 
 test('a recording started from the dashboard also holds back the paste', async () => {
