@@ -8,6 +8,7 @@ let stored: unknown = 'system';
 mock.module('electron', { namedExports: { nativeTheme } });
 mock.module(new URL('../src/main/store.ts', import.meta.url).href, {
   namedExports: {
+    applyLightDefaultOnce: () => {},
     getThemePreference: () => stored,
     setThemePreference: (theme: unknown) => {
       stored = theme;

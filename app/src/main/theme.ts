@@ -1,7 +1,7 @@
 import { nativeTheme } from 'electron';
 
 import type { ThemePreference } from '../shared/ipc.js';
-import { getThemePreference, setThemePreference } from './store.js';
+import { applyLightDefaultOnce, getThemePreference, setThemePreference } from './store.js';
 
 /**
  * Light / dark / follow-the-system, as a device-local preference.
@@ -25,6 +25,7 @@ export function applyThemePreference(theme: ThemePreference): void {
 }
 
 export function initTheme(): void {
+  applyLightDefaultOnce();
   applyThemePreference(getThemePreference());
 }
 

@@ -37,6 +37,8 @@ interface StoreSchema {
   theme: ThemePreference;
   /** Server addresses already moved off once (see retireServerUrl). */
   retiredServerUrls: string[];
+  /** The light default was applied to this install once (see applyLightDefaultOnce). */
+  lightDefaultApplied: boolean;
 }
 
 const store = new Store<StoreSchema>({
@@ -48,15 +50,27 @@ const store = new Store<StoreSchema>({
     micDeviceId: null,
     loginItemSet: false,
     serverUrl: null,
-    theme: 'system',
+    theme: 'light',
     retiredServerUrls: [],
+    lightDefaultApplied: false,
   },
 });
 
 export function getThemePreference(): ThemePreference {
   const theme = store.get('theme');
   // A hand-edited or future value must not leave nativeTheme in a bad state.
-  return theme === 'light' || theme === 'dark' ? theme : 'system';
+  return theme === 'system' || theme === 'dark' ? theme : 'light';
+}
+
+/**
+ * Light is the default now. Installs from before kept the old default,
+ * 'system' (dark on a dark Windows), saved in their store; move those to
+ * light once. Someone who picks System or Dark afterwards keeps it.
+ */
+export function applyLightDefaultOnce(): void {
+  if (store.get('lightDefaultApplied')) return;
+  store.set('lightDefaultApplied', true);
+  if (store.get('theme') === 'system') store.set('theme', 'light');
 }
 
 export function setThemePreference(theme: ThemePreference): void {
