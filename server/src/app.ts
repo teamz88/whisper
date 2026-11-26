@@ -10,7 +10,6 @@ import { createAuthGuards } from './auth/middleware.js';
 import type { Pool } from './db.js';
 import type { Env } from './env.js';
 import { isHttpError } from './errors.js';
-import type { AzureSttClient } from './services/ai/client.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerDictateRoute } from './routes/dictate.js';
@@ -21,8 +20,6 @@ export interface AppDeps {
   env: Env;
   pool: Pool;
   ai: OpenAI;
-  /** Languages transcribed on Azure instead of the main provider (Uzbek). */
-  azureStt?: AzureSttClient | null;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {

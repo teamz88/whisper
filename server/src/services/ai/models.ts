@@ -23,7 +23,7 @@ export interface ProviderDefaults {
   readonly baseURL: string;
   /** Fast path. Used for most languages. */
   readonly fastModel: string;
-  /** Slower, more accurate. Used for ru/uz/tg and when highAccuracy is on. */
+  /** Slower, more accurate. Used for Russian. */
   readonly accurateModel: string;
   /** Instruct model used for the cleanup pass. */
   readonly cleanupModel: string;
@@ -70,7 +70,7 @@ export const PROVIDER_DEFAULTS: Record<TranscriptionProvider, ProviderDefaults> 
 
 export interface TranscriptionModelChoice {
   readonly model: string;
-  readonly reason: 'high-accuracy-setting' | 'language' | 'default';
+  readonly reason: 'language' | 'default';
 }
 
 /**
@@ -80,11 +80,7 @@ export interface TranscriptionModelChoice {
 export function pickTranscriptionModel(
   defaults: ProviderDefaults,
   language: LanguageCode,
-  highAccuracy: boolean,
 ): TranscriptionModelChoice {
-  if (highAccuracy) {
-    return { model: defaults.accurateModel, reason: 'high-accuracy-setting' };
-  }
   if (needsHighAccuracyModel(language)) {
     return { model: defaults.accurateModel, reason: 'language' };
   }

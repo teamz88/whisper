@@ -1,48 +1,7 @@
 import OpenAI, { AzureOpenAI } from 'openai';
 import type { FastifyBaseLogger } from 'fastify';
 
-import type { AzureSttRoute, Env } from '../../env.js';
-
-/** The second client for languages routed to Azure (see Env.azureStt). */
-export interface AzureSttClient {
-  client: OpenAI;
-  model: string;
-  languages: ReadonlySet<string>;
-}
-
-export function createAzureSttClient(route: AzureSttRoute | null): AzureSttClient | null {
-  if (route === null) return null;
-  return {
-    client: new AzureOpenAI({
-      apiKey: route.apiKey,
-      endpoint: route.endpoint,
-      apiVersion: route.apiVersion,
-      maxRetries: 0,
-      timeout: 120_000,
-    }),
-    model: route.model,
-    languages: new Set(route.languages),
-  };
-}
-
-/** Warm the Azure connection too, so the first Uzbek dictation is not slow. */
-export async function warmAzureSttClient(
-  stt: AzureSttClient | null,
-  logger: FastifyBaseLogger,
-): Promise<void> {
-  if (stt === null) return;
-  const started = Date.now();
-  try {
-    await stt.client.models.list();
-    logger.info(
-      `[ai] azure stt ready in ${Date.now() - started}ms · ${stt.model} for ${[...stt.languages].join(', ')}`,
-    );
-  } catch (error) {
-    logger.warn(
-      `[ai] could not reach azure stt at boot: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
+import type { Env } from '../../env.js';
 
 /**
  * One shared client for both providers — Groq speaks the OpenAI wire protocol,

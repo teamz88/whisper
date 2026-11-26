@@ -29,23 +29,8 @@ export interface Env {
   fastModel: string;
   accurateModel: string;
   cleanupModel: string;
-  /**
-   * Languages transcribed on Azure while the main provider is another one
-   * (Uzbek: Groq's Whisper mangles it, gpt-4o-transcribe does not). Null when
-   * AZURE_STT_LANGUAGES is unset or the main provider is Azure already.
-   */
-  azureStt: AzureSttRoute | null;
   maxAudioBytes: number;
   logLevel: string;
-}
-
-export interface AzureSttRoute {
-  languages: readonly LanguageCode[];
-  apiKey: string;
-  endpoint: string;
-  apiVersion: string;
-  /** The Azure deployment name. */
-  model: string;
 }
 
 class EnvError extends Error {
@@ -149,34 +134,6 @@ export function loadEnv(): Env {
     );
   }
 
-  // Per-language routing to Azure, e.g. AZURE_STT_LANGUAGES=uz with Groq as the
-  // main provider. Needs the Azure key and endpoint even though the main
-  // provider does not.
-  let azureStt: AzureSttRoute | null = null;
-  const azureLanguagesRaw = readString('AZURE_STT_LANGUAGES');
-  if (azureLanguagesRaw !== undefined && provider !== 'azure') {
-    const codes = azureLanguagesRaw
-      .split(',')
-      .map((code) => code.trim().toLowerCase())
-      .filter((code) => code !== '');
-    const unknown = codes.filter((code) => !isLanguageCode(code));
-    if (unknown.length > 0) {
-      problems.push(`AZURE_STT_LANGUAGES has unknown language codes: ${unknown.join(', ')}`);
-    }
-    const azureKey = readString('AZURE_OPENAI_API_KEY');
-    if (azureKey === undefined) problems.push('AZURE_OPENAI_API_KEY is required when AZURE_STT_LANGUAGES is set');
-    if (azureEndpoint === undefined) problems.push('AZURE_OPENAI_ENDPOINT is required when AZURE_STT_LANGUAGES is set');
-    if (azureKey !== undefined && azureEndpoint !== undefined) {
-      azureStt = {
-        languages: codes.filter(isLanguageCode),
-        apiKey: azureKey,
-        endpoint: azureEndpoint,
-        apiVersion: readString('AZURE_OPENAI_API_VERSION', '2024-10-21')!,
-        model: readString('AZURE_STT_MODEL', 'gpt-4o-transcribe')!,
-      };
-    }
-  }
-
   const corsRaw = readString('CORS_ORIGIN', '*')!;
   const corsOrigin: string[] | true =
     corsRaw === '*'
@@ -213,7 +170,6 @@ export function loadEnv(): Env {
     fastModel: readString('TRANSCRIBE_FAST_MODEL', defaults.fastModel)!,
     accurateModel: readString('TRANSCRIBE_ACCURATE_MODEL', defaults.accurateModel)!,
     cleanupModel: readString('CLEANUP_MODEL', defaults.cleanupModel)!,
-    azureStt,
     maxAudioBytes,
     logLevel: readString('LOG_LEVEL', nodeEnv === 'production' ? 'info' : 'debug')!,
   };

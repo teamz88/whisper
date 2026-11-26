@@ -2,12 +2,7 @@ import { buildApp } from './app.js';
 import { deleteExpiredRefreshTokens } from './auth/tokens.js';
 import { createPool } from './db.js';
 import { loadEnv } from './env.js';
-import {
-  createAiClient,
-  createAzureSttClient,
-  warmAiClient,
-  warmAzureSttClient,
-} from './services/ai/client.js';
+import { createAiClient, warmAiClient } from './services/ai/client.js';
 
 /** Expired refresh-token rows are dead weight; sweep them once an hour. */
 const TOKEN_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
@@ -16,14 +11,12 @@ async function main(): Promise<void> {
   const env = loadEnv();
   const pool = createPool(env);
   const ai = createAiClient(env);
-  const azureStt = createAzureSttClient(env.azureStt);
 
-  const app = await buildApp({ env, pool, ai, azureStt });
+  const app = await buildApp({ env, pool, ai });
 
   // Warm the provider connection before the first user hits it, so nobody's
   // first dictation of the day pays for the TLS handshake.
   void warmAiClient(ai, env, app.log);
-  void warmAzureSttClient(azureStt, app.log);
 
   const sweep = setInterval(() => {
     deleteExpiredRefreshTokens(pool)

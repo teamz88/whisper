@@ -53,9 +53,9 @@ function MicTest({ deviceId }: { deviceId: string }): ReactNode {
 }
 
 const THEME_OPTIONS: Array<{ value: ThemePreference; label: string }> = [
-  { value: 'system', label: 'System' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
 ];
 
 function isThemeOption(value: string): value is ThemePreference {
@@ -136,7 +136,7 @@ export function Settings(): ReactNode {
   ];
 
   // --- Theme (device-local; main applies it to every window at once). --------
-  const [theme, setTheme] = useState<ThemePreference>('system');
+  const [theme, setTheme] = useState<ThemePreference>('light');
   useEffect(() => {
     let cancelled = false;
     void bridge.invoke('theme:get').then((saved) => {
@@ -269,19 +269,6 @@ export function Settings(): ReactNode {
                 value={settings.language}
                 onChange={(language) => {
                   void saveSettings({ language: coerceLanguageCode(language) });
-                }}
-              />
-            }
-          />
-          <SettingRow
-            label="High accuracy"
-            hint="Slower, but better for Russian, Uzbek and Tajik."
-            control={
-              <Toggle
-                checked={settings.highAccuracy}
-                label="High accuracy"
-                onChange={(highAccuracy) => {
-                  void saveSettings({ highAccuracy });
                 }}
               />
             }

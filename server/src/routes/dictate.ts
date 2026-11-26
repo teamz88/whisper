@@ -64,32 +64,9 @@ function readIntField(file: MultipartFile, name: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/**
- * Azure's gpt-4o-transcribe answers 400 "Language code 'uz' is not recognized"
- * for some languages Whisper accepts. For those, no language code is sent;
- * a short sentence in the language, ahead of the vocabulary, steers the model
- * to it (and to the right script: Uzbek in Latin, not Cyrillic).
- */
-const AZURE_LANGUAGE_PRIMERS: Partial<Record<LanguageCode, string>> = {
-  uz: "Assalomu alaykum. Bu matn o'zbek tilida.",
-  tg: 'Ассалому алейкум. Ин матн бо забони тоҷикӣ аст.',
-};
-
-function azureLanguageParams(
-  language: LanguageCode,
-  vocabularyPrompt: string | undefined,
-): { language: LanguageCode | null; prompt: string | undefined } {
-  const primer = AZURE_LANGUAGE_PRIMERS[language];
-  if (primer === undefined) return { language, prompt: vocabularyPrompt };
-  return {
-    language: null,
-    prompt: vocabularyPrompt === undefined ? primer : `${primer} ${vocabularyPrompt}`,
-  };
-}
-
 export function registerDictateRoute(
   app: FastifyInstance,
-  { pool, ai, env, azureStt = null }: AppDeps,
+  { pool, ai, env }: AppDeps,
   guards: AuthGuards,
 ): void {
   /**
@@ -166,7 +143,6 @@ export function registerDictateRoute(
           cleanupModel: env.cleanupModel,
         },
         language,
-        settings.highAccuracy,
       );
 
       // The user's own vocabulary, never a client-supplied one — this is read
@@ -181,29 +157,9 @@ export function registerDictateRoute(
         prompt,
       };
 
-      // Languages routed to Azure (Uzbek) go there first; if Azure fails, the
-      // main provider still gets the audio, so nothing is lost to an outage.
       const whisperStartedAt = Date.now();
-      let sttLabel = `${model}(${reason})`;
-      let transcript: string;
-      if (azureStt !== null && azureStt.languages.has(language)) {
-        try {
-          transcript = await transcribe(
-            azureStt.client,
-            { ...sttInput, model: azureStt.model, ...azureLanguageParams(language, prompt) },
-            request.log,
-          );
-          sttLabel = `azure:${azureStt.model}(${language})`;
-        } catch (error) {
-          request.log.warn(
-            `[dictate] azure stt failed for ${language}, falling back to ${env.provider}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          transcript = await transcribe(ai, { ...sttInput, model }, request.log);
-          sttLabel = `${model}(fallback from azure)`;
-        }
-      } else {
-        transcript = await transcribe(ai, { ...sttInput, model }, request.log);
-      }
+      const sttLabel = `${model}(${reason})`;
+      const transcript = await transcribe(ai, { ...sttInput, model }, request.log);
       const whisperMs = Date.now() - whisperStartedAt;
 
       // Lookalike spaces are replaced before anything else sees the text, so

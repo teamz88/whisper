@@ -1,6 +1,7 @@
 /**
- * Spoken languages offered in Settings. Codes are ISO-639-1 because that is what
- * the Whisper `language` parameter expects on both Groq and OpenAI.
+ * Spoken languages offered in Settings: English and Russian only. A stored
+ * code outside this list (an old Uzbek setting) reads back as English. Codes
+ * are ISO-639-1 because that is what the Whisper `language` parameter expects.
  */
 
 export interface LanguageOption {
@@ -13,19 +14,6 @@ export interface LanguageOption {
 export const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English' },
   { code: 'ru', label: 'Russian', native: 'Русский' },
-  { code: 'uz', label: 'Uzbek', native: "O'zbek" },
-  { code: 'tg', label: 'Tajik', native: 'Тоҷикӣ' },
-  { code: 'es', label: 'Spanish', native: 'Español' },
-  { code: 'fr', label: 'French', native: 'Français' },
-  { code: 'de', label: 'German', native: 'Deutsch' },
-  { code: 'it', label: 'Italian', native: 'Italiano' },
-  { code: 'pt', label: 'Portuguese', native: 'Português' },
-  { code: 'nl', label: 'Dutch', native: 'Nederlands' },
-  { code: 'ja', label: 'Japanese', native: '日本語' },
-  { code: 'zh', label: 'Chinese', native: '中文' },
-  { code: 'ko', label: 'Korean', native: '한국어' },
-  { code: 'ar', label: 'Arabic', native: 'العربية' },
-  { code: 'hi', label: 'Hindi', native: 'हिन्दी' },
 ] as const satisfies readonly LanguageOption[];
 
 export type LanguageCode = (typeof LANGUAGES)[number]['code'];
@@ -48,10 +36,9 @@ export function languageLabel(code: LanguageCode): string {
 
 /**
  * Languages where the turbo model's accuracy drops off enough to be worth the
- * extra latency of large-v3. The server also switches on the user's
- * `highAccuracy` setting.
+ * extra latency of large-v3.
  */
-export const HIGH_ACCURACY_LANGUAGES: readonly LanguageCode[] = ['ru', 'uz', 'tg'];
+export const HIGH_ACCURACY_LANGUAGES: readonly LanguageCode[] = ['ru'];
 
 export function needsHighAccuracyModel(code: LanguageCode): boolean {
   return HIGH_ACCURACY_LANGUAGES.includes(code);
