@@ -23,7 +23,7 @@ import {
 import type { AppInfo, RecordingState, UpdateStatus } from '../../../shared/ipc.js';
 import { bridge } from '../lib/bridge.js';
 
-export type Page = 'home' | 'history' | 'settings';
+export type Page = 'home' | 'history' | 'settings' | 'faq';
 
 export type AppStatus = 'loading' | 'signed-out' | 'onboarding' | 'ready';
 

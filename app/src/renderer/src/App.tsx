@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { Spinner } from './components/ui.js';
 import { TitleBar } from './components/TitleBar.js';
 import { UpdateToast } from './components/UpdateToast.js';
+import { Faq } from './pages/Faq.js';
 import { History } from './pages/History.js';
 import { Home } from './pages/Home.js';
 import { Login } from './pages/Login.js';
@@ -58,6 +59,7 @@ export function App(): ReactNode {
           {page === 'home' ? <Home /> : null}
           {page === 'history' ? <History /> : null}
           {page === 'settings' ? <Settings /> : null}
+          {page === 'faq' ? <Faq /> : null}
         </main>
       </div>
       <UpdateToast />
